@@ -358,3 +358,107 @@ Theorem lookup_scoped (Gamma : con) (Hg : scoped_con Gamma) :
   - destruct i; simpl in *; [rewrite <- minus_n_O; auto|apply IHHg with (Hi := le_S_n _ _ Hi)].
 Qed.
 
+Hint Resolve lookup_scoped.
+
+Program Definition lookup_wk (Gamma : con) (i : {x | x < length Gamma}) := wk_deep (S i) 0 (lookup_lt Gamma i).
+
+Check wk_scoped.
+Program Definition lookup_wk_scoped_prog (Gamma : {gamma | scoped_con gamma}) i : scoped_at (length Gamma) (lookup_wk Gamma i) :=
+  wk_scoped (lookup_lt Gamma i) (length Gamma - S i) _ (S i) 0.
+
+Obligation 2. omega. Qed.
+
+(* split for nicer proof terms *)
+Lemma lookup_wk_scoped (Gamma : con) (p : scoped_con Gamma) : forall i, scoped_at (length Gamma) (lookup_wk Gamma i).
+  apply (lookup_wk_scoped_prog (exist _ Gamma p)). Qed.
+
+Hint Resolve lookup_wk_scoped.
+
+Definition wk_n n := wk_deep n 0.
+Definition wk_at n := wk_deep 1 n.
+
+Definition prop := typ 0.
+Definition set := typ 1.
+
+Print list.
+Infix "," := (fun Gamma a => cons a Gamma) (at level 50, left associativity).
+Infix "-->" := (fun a b => pi a (wk_at 0 b)) (at level 100, right associativity).
+
+Inductive has_type (Gamma : con) : exp -> exp -> Prop :=
+| ty_var : forall i p, has_type Gamma (var i) (lookup_wk Gamma (exist _ i p))
+
+| ty_set : forall n, has_type Gamma (typ n) (typ (S n))
+
+| ty_cumulative : forall A n, has_type Gamma A (typ n)
+                       -> has_type Gamma A (typ (S n))
+
+| ty_pi_prop : forall A P n, has_type Gamma A (typ n)
+                      -> has_type (Gamma , A) P prop
+                      -> has_type Gamma (pi A P) prop
+
+| ty_pi_typ : forall A B n m, has_type Gamma A (typ n)
+                       -> has_type (Gamma , A) B (typ m)
+                       -> has_type Gamma (pi A B) (typ (max n m))
+
+| ty_sg_typ : forall A B n m, has_type Gamma A (typ n)
+                       -> has_type (Gamma , A) B (typ m)
+                       -> has_type Gamma (sigma A B) (typ (max n m))
+
+| ty_wt_typ : forall A B n m, has_type Gamma A (typ n)
+                       -> has_type (Gamma , A) B (typ m)
+                       -> has_type Gamma (wt A B) (typ (max n m))
+
+| ty_bool : has_type Gamma bool set
+| ty_top : has_type Gamma top prop
+| ty_bot : has_type Gamma top bot
+
+| ty_lam : forall A n B b, has_type Gamma A (typ n)
+                    -> has_type (Gamma , A) b B
+                    -> has_type Gamma (lam A b) (pi A B)
+
+| ty_app : forall A B f a, has_type Gamma f (pi A B)
+                    -> has_type Gamma a A
+                    -> has_type Gamma (f @ a) (subst_deep a 0 B)
+
+| ty_smk : forall A B a b, has_type Gamma a A
+                    -> has_type Gamma b (subst_deep a 0 B)
+                    -> has_type Gamma (a # b) (sigma A B)
+
+| ty_srec : forall A B C f s, has_type (Gamma , A , B) f (subst_deep (& 1 # & 0) 0 (wk_deep 2 1 C))
+                      -> has_type Gamma s (sigma A B)
+                      -> has_type Gamma (srec C f s) (subst_deep s 0 C)
+
+| ty_sup : forall A B n a f, has_type Gamma a A
+                      -> has_type (A :: Gamma) B (typ n)
+                      -> has_type (subst_deep a 0 B :: Gamma) f (wk_at 0 (wt A B))
+                      -> has_type Gamma (sup a f) (wt A B)
+
+| ty_wrec : forall C A B f w,
+             has_type (Gamma , A , (pi B (wk_deep 2 0 (wt A B))) , wk_at 1 B) f (subst_deep (& 1 @ & 0) 0 (wk_deep 3 1 C))
+           -> has_type Gamma w (wt A B)
+           -> has_type Gamma (wrec C f w) (subst_deep w 0 C)
+
+| ty_true : has_type Gamma true bool
+| ty_false : has_type Gamma false bool
+| ty_brc : forall C t f b, has_type Gamma t (subst_deep true 0 C)
+                    -> has_type Gamma f (subst_deep false 0 C)
+                    -> has_type Gamma b bool
+                    -> has_type Gamma (brc C t f b) (subst_deep b 0 C)
+
+| ty_unit : has_type Gamma unit top
+| ty_urec : forall C u t, has_type Gamma u (subst_deep unit 0 C)
+                   -> has_type Gamma t top
+                   -> has_type Gamma (urec C u t) (subst_deep t 0 C)
+
+| ty_exf : forall C n f, has_type (bot :: Gamma) C (typ n)
+                  -> has_type Gamma f bot
+                  -> has_type Gamma (exf C f) (subst_deep f 0 C).
+
+Notation "Gamma ⊢ t ∈ T" := (has_type Gamma t T) (at level 10).
+Hint Constructors has_type.
+
+Inductive wf_con : con -> Prop :=
+| wf_nil : wf_con nil
+| wf_cons : forall Gamma A n, wf_con Gamma -> Gamma ⊢ A ∈ (typ n) -> wf_con (Gamma , A).
+
+Hint Constructors wf_con.
