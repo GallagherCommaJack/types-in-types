@@ -2,20 +2,19 @@ Require Export Arith.
 
 Inductive exp : Set :=
 | var : forall(ix : nat), exp
-| prop : exp
-| set : forall(level : nat), exp
+| typ : forall(level : nat), exp
 
 | pi : forall(A B : exp), exp
-| lam : forall(b : exp), exp
+| lam : forall(A b : exp), exp
 | app : forall(f x : exp), exp
 
-| sg : forall(A B : exp), exp
+| sigma : forall(A B : exp), exp
 | smk : forall(a b : exp), exp
-| src : forall(C p s : exp), exp
+| srec : forall(C p s : exp), exp
 
 | wt : forall(A B : exp), exp
 | sup : forall(a f : exp), exp
-| wrc : forall(C s w : exp), exp
+| wrec : forall(C s w : exp), exp
 
 | bool : exp
 | true : exp
@@ -24,7 +23,7 @@ Inductive exp : Set :=
 
 | top : exp
 | unit : exp
-| trc : forall(C u t : exp), exp
+| urec : forall(C u t : exp), exp
 
 | bot : exp
 | exf : forall(C f : exp), exp.
@@ -41,25 +40,28 @@ Definition exp_size (e : exp) : nat.
 Definition exp_eq_dec (e1 e2 : exp) : {e1 = e2} + {e1 <> e2}.
   decide equality. Qed.
 
-Inductive scoped_at (n : nat) : exp -> Prop :=
-| scope_var : forall i, i < n -> scoped_at n (var i)
+Infix "#" := smk (at level 100, right associativity).
+Infix "@" := app (at level 500, left associativity).
+Notation "&" := var.
 
-| scope_prop : scoped_at n prop
-| scope_set : forall m, scoped_at n (set m)
+Inductive scoped_at (n : nat) : exp -> Prop :=
+| scope_var : forall i, i < n -> scoped_at n (& i)
+
+| scope_typ : forall m, scoped_at n (typ m)
 
 | scope_pi : forall a b, scoped_at n a -> scoped_at (S n) b -> scoped_at n (pi a b)
-| scope_lam : forall b, scoped_at (S n) b -> scoped_at n (lam b)
-| scope_app : forall f x, scoped_at n f -> scoped_at n x -> scoped_at n (app f x)
+| scope_lam : forall A b, scoped_at n A -> scoped_at (S n) b -> scoped_at n (lam A b)
+| scope_app : forall f x, scoped_at n f -> scoped_at n x -> scoped_at n (f @ x)
 
-| scope_sg : forall a b, scoped_at n a -> scoped_at (S n) b -> scoped_at n (sg a b)
-| scope_smk : forall a b, scoped_at n a -> scoped_at n b -> scoped_at n (smk a b)
-| scope_src : forall c p s, scoped_at (S n) c -> scoped_at (2 + n) p -> scoped_at n s
-                       -> scoped_at n (src c p s)
+| scope_sigma : forall a b, scoped_at n a -> scoped_at (S n) b -> scoped_at n (sigma a b)
+| scope_smk : forall a b, scoped_at n a -> scoped_at n b -> scoped_at n (a # b)
+| scope_srec : forall c p s, scoped_at (S n) c -> scoped_at (2 + n) p -> scoped_at n s
+                       -> scoped_at n (srec c p s)
 
 | scope_wt : forall a b, scoped_at n a -> scoped_at (S n) b -> scoped_at n (wt a b)
 | scope_sup : forall a f, scoped_at n a -> scoped_at (S n) f -> scoped_at n (sup a f)
-| scope_wrc : forall c s w, scoped_at (S n) c -> scoped_at (3 + n) s -> scoped_at n w
-                       -> scoped_at n (wrc c s w)
+| scope_wrec : forall c s w, scoped_at (S n) c -> scoped_at (3 + n) s -> scoped_at n w
+                       -> scoped_at n (wrec c s w)
 
 | scope_bool : scoped_at n bool
 | scope_true : scoped_at n true
@@ -69,8 +71,8 @@ Inductive scoped_at (n : nat) : exp -> Prop :=
 
 | scope_top : scoped_at n top
 | scope_unit : scoped_at n unit
-| scope_trc : forall c u t, scoped_at (S n) c -> scoped_at n u -> scoped_at n t
-                       -> scoped_at n (trc c u t)
+| scope_urec : forall c u t, scoped_at (S n) c -> scoped_at n u -> scoped_at n t
+                       -> scoped_at n (urec c u t)
 
 | scope_bot : scoped_at n bot
 | scope_exf : forall c f, scoped_at (S n) c -> scoped_at n f -> scoped_at n (exf c f).
@@ -103,22 +105,22 @@ Qed.
 
 Fixpoint count_free (e : exp) : nat :=
   match e with
-    | var i => S i
+    | & i => S i
     | pi a b => max (count_free a) (pred (count_free b))
-    | sg a b => max (count_free a) (pred (count_free b))
+    | sigma a b => max (count_free a) (pred (count_free b))
     | wt a b => max (count_free a) (pred (count_free b))
 
-    | lam b => pred (count_free b)
-    | app f x => max (count_free f) (count_free x)
+    | lam A b => max (count_free A) (pred (count_free b))
+    | (f @ x) => max (count_free f) (count_free x)
 
-    | smk a b => max (count_free a) (count_free b)
-    | src c p s => max (max (pred (count_free c)) (pred (pred (count_free p)))) (count_free s)
+    | (a # b) => max (count_free a) (count_free b)
+    | srec c p s => max (max (pred (count_free c)) (pred (pred (count_free p)))) (count_free s)
 
     | sup a f => max (count_free a) (pred (count_free f))
-    | wrc c s w => max (max (pred (count_free c)) (pred (pred (pred (count_free s))))) (count_free w)
+    | wrec c s w => max (max (pred (count_free c)) (pred (pred (pred (count_free s))))) (count_free w)
 
     | brc c t f b => max (max (max (pred (count_free c)) (count_free t)) (count_free f)) (count_free b)
-    | trc c u t => max (max (pred (count_free c)) (count_free u)) (count_free t)
+    | urec c u t => max (max (pred (count_free c)) (count_free u)) (count_free t)
     | exf c f => max (pred (count_free c)) (count_free f)
     
     | _ => 0
@@ -159,7 +161,6 @@ Theorem scoped_at_count (e : exp) : scoped_at (count_free e) e.
   induction e; intros;
   try (constructor; simpl in *; omega);
   try (constructor; simpl; SMax; (eapply scoped_at_lift; [eassumption|le_max])).
-  - constructor; simpl; eauto.
 Qed.
 
 Lemma max_le_eq_l : forall n m, n <= m -> max n m = m.
@@ -193,23 +194,23 @@ Theorem count_free_least (e : exp) : forall n, scoped_at n e -> count_free e <= 
 (* And now for something completely different... *)
 Fixpoint vars_op (op : forall(ix d : nat), exp) (d : nat) (e : exp) : exp :=
   match e with
-    | var i => op i d
+    | & i => op i d
 
     | pi a b => pi (vars_op op d a) (vars_op op (S d) b)
-    | sg a b => sg (vars_op op d a) (vars_op op (S d) b)
+    | sigma a b => sigma (vars_op op d a) (vars_op op (S d) b)
     | wt a b => wt (vars_op op d a) (vars_op op (S d) b)
 
-    | lam b => lam (vars_op op (S d) b)
-    | app f x => app (vars_op op d f) (vars_op op d x)
+    | lam A b => lam (vars_op op d A) (vars_op op (S d) b)
+    | (f @ x) => app (vars_op op d f) (vars_op op d x)
 
-    | smk a b => smk (vars_op op d a) (vars_op op d b)
-    | src c p s => src (vars_op op (S d) c) (vars_op op (2 + d) p) (vars_op op d s)
+    | (a # b) => smk (vars_op op d a) (vars_op op d b)
+    | srec c p s => srec (vars_op op (S d) c) (vars_op op (2 + d) p) (vars_op op d s)
 
     | sup a f => sup (vars_op op d a) (vars_op op (S d) f)
-    | wrc c s w => wrc (vars_op op (S d) c) (vars_op op (3 + d) s) (vars_op op d w)
+    | wrec c s w => wrec (vars_op op (S d) c) (vars_op op (3 + d) s) (vars_op op d w)
 
     | brc c t f b => brc (vars_op op (S d) c) (vars_op op d t) (vars_op op d f) (vars_op op d b)
-    | trc c u t => trc (vars_op op (S d) c) (vars_op op d u) (vars_op op d t)
+    | urec c u t => urec (vars_op op (S d) c) (vars_op op d u) (vars_op op d t)
     | exf c f => exf (vars_op op (S d) c) (vars_op op d f)
 
     | _ => e
