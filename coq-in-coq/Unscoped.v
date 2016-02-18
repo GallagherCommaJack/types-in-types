@@ -221,12 +221,12 @@ Definition wk_deep (n : nat) : nat -> exp -> exp := vars_op (wk_var n).
 
 Hint Unfold vars_op wk_var wk_deep.
 
-Theorem wk_preserve_scope (e : exp) n (p : scoped_at n e) : forall m d, scoped_at (m + n) (wk_deep m d e).
+Theorem wk_scoped (e : exp) n (p : scoped_at n e) : forall m d, scoped_at (m + n) (wk_deep m d e).
   induction p; intros; unfold wk_deep in *; simpl; try constructor; simpl; repeat rewrite plus_n_Sm; auto.
   - unfold wk_var; simpl; destruct (le_dec d i); constructor; omega.
 Qed.
 
-Hint Resolve wk_preserve_scope.
+Hint Resolve wk_scoped.
 
 Definition subst_var (v : exp) (i d : nat) : exp := match lt_eq_lt_dec i d with
                                                     | inleft (left _) => var i
@@ -243,7 +243,7 @@ Notation "e [ x / i ]" := (subst_deep x i e) (at level 300).
 
 Hint Unfold subst_deep subst_var.
 
-Theorem subst_preserve_scope (e : exp) n (p : scoped_at n e) :
+Lemma subst_scoped_pred (e : exp) n (p : scoped_at n e) :
   forall d v, d < n -> scoped_at (n - S d) v -> scoped_at (pred n) (subst_deep v d e).
   induction p; intros d v Hd Hv; (destruct n; simpl in *; [exfalso;omega|]);
   try constructor;
@@ -252,13 +252,20 @@ Theorem subst_preserve_scope (e : exp) n (p : scoped_at n e) :
   try (apply IHp2; [omega|auto]); try (apply IHp3; [omega|auto]); try (apply IHp4; [omega|auto]).
   (* vars, the always special case *)
   - unfold subst_deep; unfold subst_var; simpl; destruct (lt_eq_lt_dec i d) as [Hle|Hgt]; [destruct Hle as [Hlt|_]|];
-    [constructor|replace n with (d + (n - d)) by omega; apply wk_preserve_scope|constructor]; [omega|auto|omega].
+    [constructor|replace n with (d + (n - d)) by omega; apply wk_scoped|constructor]; [omega|auto|omega].
 Qed.
 
-Hint Resolve subst_preserve_scope.
+Theorem subst_scoped (e : exp) n (p : scoped_at (S n) e) :
+  forall d v, d <= n -> scoped_at (n - d) v -> scoped_at n (subst_deep v d e).
+  replace n with (pred (S n)) by omega; intros; apply subst_scoped_pred; auto. Qed.
+
+Hint Resolve subst_scoped.
+
+Theorem subst_0_scoped (e : exp) n (p : scoped_at (S n) e) v : scoped_at n v -> scoped_at n (subst_deep v 0 e).
+  intro H. replace n with (n - 0) in H by omega. apply subst_scoped; auto; omega. Qed.
 
 Definition con := list exp.
-Require Import List.
+Open Scope list_scope.
 
 Inductive scoped_con : con -> Prop :=
 | scope_nil : scoped_con nil
@@ -267,8 +274,45 @@ Inductive scoped_con : con -> Prop :=
 Hint Constructors scoped_con.
 
 Require Import Coq.Program.Wf.
-Fixpoint lookup_con (Gamma : con) (i : nat) : exp + {i >= length Gamma} :=
-  match Gamma , i return exp + {i >= length Gamma} with
+
+Lemma unwk_scoped : forall e n m d, d <= m -> scoped_at (n + m) (wk_deep n d e) -> scoped_at m e.
+  induction e; intros n m d Hd He; simpl in *; try (
+  (* dispatch trivial cases *)
+  try (repeat constructor; auto; fail);
+  (* var case takes some special handling *)
+  try (unfold wk_deep in *; unfold wk_var in *; simpl in *; destruct (le_dec d ix));
+  (* invert and split obligations *)
+  inversion He; subst; constructor; simpl in *; repeat rewrite plus_n_Sm in *;
+  (* try all the IH's *)
+  try eapply (IHe1 n); try eapply (IHe2 n); try eapply (IHe3 n); try eapply (IHe4 n);
+  (* finish the job *)
+  try eassumption; omega).
+Qed.
+
+Hint Resolve unwk_scoped.
+
+Lemma unsubst_scoped : forall e v d n, d <= n -> scoped_at (n - d) v -> scoped_at n (subst_deep v d e) -> scoped_at (S n) e.
+  induction e; intros v d n Hd Hv He; unfold subst_deep in *; simpl in *;
+  (* var case always takes some special care *)
+  try (unfold subst_var in *; simpl in *;
+       destruct (lt_eq_lt_dec ix d) as [Hle|Hgt]; [destruct Hle as [Hlt|Heq]|]; inversion He; constructor; omega);
+  (* invert things and split *)
+  inversion He; subst; repeat constructor;
+  (* try all IH's *)
+  try eapply (IHe v); try eapply (IHe1 v); try eapply (IHe2 v); try eapply (IHe3 v); try eapply (IHe4 v);
+  match goal with
+    (* use ordering cases to instantiate d *)
+    | [|- _ <= _] => repeat (try apply Hd; apply le_n_S in Hd)
+    | _ => assumption (* otherwise it'll just be a piece of He *)
+ end.
+Qed.
+
+Lemma unsubst_scoped_O : forall e v n, scoped_at n v -> scoped_at n (subst_deep v 0 e) -> scoped_at (S n) e.
+  intros e v n Hv He; apply unsubst_scoped in He; try rewrite <- minus_n_O; try assumption; omega. Qed.
+
+
+Fixpoint lookup_con {A} (Gamma : list A) (i : nat) : A + {i >= length Gamma} :=
+  match Gamma , i with
     | nil , _ => inright (Peano.le_0_n i)
     | (X :: Gamma) , 0 => inleft X
     | (X :: Gamma) , S n => match lookup_con Gamma n with
@@ -277,7 +321,7 @@ Fixpoint lookup_con (Gamma : con) (i : nat) : exp + {i >= length Gamma} :=
                        end
   end.
 
-Program Fixpoint lookup_lt (Gamma : con) (i : {x | x < length Gamma}) : exp :=
+Program Fixpoint lookup_lt {A} (Gamma : list A) (i : {x | x < length Gamma}) : A :=
   match Gamma , i with
     | nil , _ => False_rect _ _
     | (x :: xs) , 0   => x
@@ -289,7 +333,20 @@ Obligation 2. exact (le_S_n _ _ H). Defined.
 
 Print lookup_lt.
 
-Lemma lookup_lt_con (Gamma : con) : forall (i : nat) (Hi : i < length Gamma), lookup_con Gamma i = inleft (lookup_lt Gamma (exist _ i Hi)).
+Lemma lookup_irrel A (Gamma : list A) : forall i p q, lookup_lt Gamma (exist _ i p) = lookup_lt Gamma (exist _ i q).
+  induction Gamma; [simpl;intros;exfalso;omega|]; destruct i; intros; simpl; eauto.
+Qed.
+
+Hint Rewrite lookup_irrel.
+
+Definition fsu {n} (i : {x | x < n}) : {x | x < S n}. destruct i as [i Hi]; exists (S i); apply le_n_S; assumption. Defined.
+
+Lemma lookup_irrel A (Gamma : list A) : forall i p q, lookup_lt Gamma (exist _ i p) = lookup_lt Gamma (exist _ i q).Lemma lookup_cons A Gamma i : forall a, @lookup_lt A (a :: Gamma) (fsu i) = lookup_lt Gamma i.
+  destruct i as [i Hi]; simpl; erewrite lookup_irrel; reflexivity. Qed.
+
+Hint Rewrite lookup_cons.
+
+Lemma lookup_lt_con A (Gamma : list A) : forall (i : nat) (Hi : i < length Gamma), lookup_con Gamma i = inleft (lookup_lt Gamma (exist _ i Hi)).
   induction Gamma; destruct i; try (inversion Hi; fail); auto; intros.
   - simpl; rewrite IHGamma with (Hi := (le_S_n _ _ Hi)); reflexivity.
 Qed.
