@@ -339,9 +339,7 @@ Qed.
 
 Hint Rewrite lookup_irrel.
 
-Definition fsu {n} (i : {x | x < n}) : {x | x < S n}. destruct i as [i Hi]; exists (S i); apply le_n_S; assumption. Defined.
-
-Lemma lookup_irrel A (Gamma : list A) : forall i p q, lookup_lt Gamma (exist _ i p) = lookup_lt Gamma (exist _ i q).Lemma lookup_cons A Gamma i : forall a, @lookup_lt A (a :: Gamma) (fsu i) = lookup_lt Gamma i.
+Lemma lookup_cons A Gamma i : forall a, @lookup_lt A (a :: Gamma) (fsu i) = lookup_lt Gamma i.
   destruct i as [i Hi]; simpl; erewrite lookup_irrel; reflexivity. Qed.
 
 Hint Rewrite lookup_cons.
@@ -462,3 +460,55 @@ Inductive wf_con : con -> Prop :=
 | wf_cons : forall Gamma A n, wf_con Gamma -> Gamma ⊢ A ∈ (typ n) -> wf_con (Gamma , A).
 
 Hint Constructors wf_con.
+
+Theorem typed_implies_scoped : forall Gamma t T, scoped_con Gamma -> Gamma ⊢ t ∈ T -> scoped_at (length Gamma) T /\ scoped_at (length Gamma) t.
+Proof with eassumption.
+  intros Gamma t T Hg.
+  induction 1; auto; simpl in *; try (repeat constructor; auto; fail);
+  try (destruct (IHhas_type Hg) as [IH1 IH2]);
+  try (destruct (IHhas_type1 Hg) as [IH11 IH12]); try (destruct (IHhas_type2 Hg) as [IH21 IH22]);
+  try (destruct (IHhas_type3 Hg) as [IH31 IH32]); try (destruct (IHhas_type4 Hg) as [IH41 IH42]);
+  try (destruct (IHhas_type2 (scope_cons _ _ Hg IH12)) as [IH21 IH22]);
+  try (split; repeat constructor; auto; fail).
+  (* app is weird *)
+  - split; try (constructor; auto).
+    + inversion IH11; subst; apply subst_0_scoped...
+  - split; try (constructor;auto); eapply unsubst_scoped_O; [|eassumption]...
+  (* recursion principles will take special handling *)
+  - inversion IH21; subst. assert (Hg' : scoped_con (B :: A :: Gamma)) by auto. destruct (IHhas_type1 Hg') as [IH11 IH12].
+    assert (IHC : scoped_at (S(length Gamma)) C).
+      + apply unwk_scoped with (n := 2) (d := 1); [omega|eapply unsubst_scoped]; try eassumption.
+        * omega.
+        * constructor; constructor; omega.
+    + split; auto.
+      * apply subst_0_scoped...
+  (* oh, and so will sup *)
+  - destruct (IHhas_type2 (scope_cons _ _ Hg IH11)) as [IH21 IH22].
+    assert (Hg'' : scoped_con (subst_deep a 0 B :: Gamma)).
+      constructor; [|apply subst_0_scoped]...
+    destruct (IHhas_type3 Hg''); split; auto.
+  (* now for the /really/ fun one, wrec *)
+  - inversion IH21; subst.
+    assert (Hg' : scoped_con (wk_at 1 B :: pi B (wk_deep 2 0 (wt A B)) :: A :: Gamma)).
+      constructor; [constructor ;[constructor|]|];
+      [| |simpl; constructor; try assumption;
+          replace (S (S (length Gamma))) with (2 + length Gamma) by omega;
+          apply wk_scoped; constructor
+       | simpl; replace (S (S (length Gamma))) with (1 + S(length Gamma)) by omega; apply wk_scoped]...
+    destruct (IHhas_type1 Hg') as [IH11 IH12].
+    assert (Hc : scoped_at (S (length Gamma)) C). 
+      apply unsubst_scoped_O in IH11; [|constructor;constructor;omega].
+      apply unwk_scoped with (n := 3) (d := 1); [omega|]...
+    split; [apply subst_0_scoped|constructor]...
+  - assert (Hc : scoped_at (S (length Gamma)) C).
+      eapply unsubst_scoped_O; [|eassumption]; auto.
+    split; [apply subst_0_scoped|constructor]...
+  - assert (Hc : scoped_at (S (length Gamma)) C).
+      eapply unsubst_scoped_O; [|eassumption]; auto.
+    split; [apply subst_0_scoped|constructor]...
+  - destruct (IHhas_type1 (scope_cons _ _ Hg (scope_bot _))) as [IH11 IH12].
+    split; [apply subst_0_scoped|constructor]...
+Qed. (* seems like it ought to be possible to automate more of that, but for now I'll just leave it be *)
+
+Theorem wf_implies_scoped : forall Gamma, wf_con Gamma -> scoped_con Gamma.
+  induction 1; constructor; try eapply typed_implies_scoped; eassumption. Qed.
