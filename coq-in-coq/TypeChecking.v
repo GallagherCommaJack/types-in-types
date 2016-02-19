@@ -37,11 +37,17 @@ Ltac assert_uqs_inv :=
 Local Hint Extern 1 => assert_uqs.
 
 Theorem ty_check e : forall Gamma, {T | has_type Gamma e T} + {forall T, ~has_type Gamma e T}.
-  induction e; try (left; econstructor; eauto; fail); try (right; inversion 1; eauto; fail); intros;
+  induction e; intros;
+  (* make var do the right thing *)
+  try (destruct (lt_dec ix (length Gamma)) as [Hg|nHg];
+       [left; exists (lookup_wk Gamma (exist _ ix Hg)); auto
+       |right; inversion 1; subst; contradiction]);
+  (* trivial cases *)
+  try (left; repeat econstructor; eassumption; fail); try (right; inversion 1; assert_uqs; congruence; fail);
   (* pi, lam, sigma, wt *)
   try (destruct (IHe1 Gamma) as [T1 | nT1]; destruct (IHe2 (Gamma ▻ e1)) as [T2 | nT2];
-       try destruct T1 as [T1 Ht1]; try destruct T2 as [T2 Ht2];
        try (right; inversion 1; eapply nT1 || eapply nT2; eassumption);
+       destruct T1 as [T1 Ht1]; try destruct T2 as [T2 Ht2];
        destruct T1; try (right; inversion 1; subst; assert_uqs; congruence; fail);
        destruct T2; try (right; inversion 1; subst; assert_uqs; congruence; fail);
        left; repeat econstructor; eassumption).
@@ -75,9 +81,31 @@ Theorem ty_check e : forall Gamma, {T | has_type Gamma e T} + {forall T, ~has_ty
   (* wrec *)
   - destruct (IHe3 Gamma) as [T3|nT3]; [|right; inversion 1; eapply nT3; eassumption].
     destruct T3 as [T3 Ht3].
-    destruct (IHe1 (Gamma ▻ T3)) as [T1|nT1]; [|right; inversion 1; assert_uqs; eapply nT1].
-    + destruct T3; try (right; inversion 1; assert_uqs; congruence).
-      destruct T1 as [T1 Ht1].
-      destruct (IHe2 (Gamma ▻ T3_1 ▻ pi T3_2 (wk_n 2 (wt T3_1 T3_2)) ▻ wk_at 1 T3_2)) as [T2|nT2];
-        [|right; inversion 1; assert_uqs; eapply nT2].
-      * destruct T2 as [T2 Ht2].
+    destruct T3; try (right; inversion 1; assert_uqs; congruence).
+    destruct (IHe2 (Gamma ▻ T3_1 ▻ pi T3_2 (wk_deep 2 0 (wt T3_1 T3_2)) ▻ wk_at 1 T3_2)) as [T2|nT2];
+      [|right; inversion 1; assert_uqs; inversion H6; subst; assert_uqs; eapply nT2; eauto].
+    destruct T2 as [T2 Ht2]; destruct (T2 == subst_deep (&1 @ &0) 0 (wk_deep 3 1 e1));
+      [subst; left; repeat econstructor; eassumption
+      |right; inversion 1; subst; assert_uqs; inversion H0; subst; assert_uqs; congruence].
+  (* brec *)
+  - destruct (IHe2 Gamma) as [T2|nT2]; destruct (IHe3 Gamma) as [T3|nT3]; destruct (IHe4 Gamma) as [T4|nT4];
+    try (right; inversion 1; assert_uqs; eapply nT2 || eapply nT3 || eapply nT4; eassumption);
+    destruct T2 as [T2 Ht2]; destruct T3 as [T3 Ht3]; destruct T4 as [T4 Ht4];
+    destruct T4 , (T2 == subst_deep true 0 e1) , (T3 == subst_deep false 0 e1);
+    try (right; inversion 1; assert_uqs; congruence);
+    subst; left; repeat econstructor; eassumption.
+  (* urec *)
+  - destruct (IHe2 Gamma) as [T2|nT2]; destruct (IHe3 Gamma) as [T3|nT3];
+    try (right; inversion 1; assert_uqs; eapply nT2 || eapply nT3; eassumption);
+    destruct T2 as [T2 Ht2]; destruct T3 as [T3 Ht3];
+    destruct T3 , (T2 == subst_deep unit 0 e1); try (right; inversion 1; assert_uqs; congruence);
+    subst; left; repeat econstructor; eassumption.
+  (* exf *)
+  - destruct (IHe1 (Gamma ▻ bot)) as [T1|nT1]; destruct (IHe2 Gamma) as [T2|nT2];
+    try (right; inversion 1; assert_uqs; eapply nT1 || eapply nT2; eassumption);
+    destruct T1 as [T1 Ht1]; destruct T2 as [T2 Ht2];
+    destruct T1; try (right; inversion 1; assert_uqs; congruence);
+    (* separately because case explosion = bad *)
+    destruct T2; try (right; inversion 1; assert_uqs; congruence);
+    subst; left; repeat econstructor; eassumption.
+Defined.
