@@ -9,11 +9,11 @@ Inductive exp : Set :=
 | app : forall(f x : exp), exp
 
 | sigma : forall(A B : exp), exp
-| smk : forall(a b : exp), exp
+| smk : forall(B a b : exp), exp
 | srec : forall(C p s : exp), exp
 
 | wt : forall(A B : exp), exp
-| sup : forall(a f : exp), exp
+| sup : forall(B a f : exp), exp
 | wrec : forall(C s w : exp), exp
 
 | bool : exp
@@ -40,7 +40,7 @@ Definition exp_size (e : exp) : nat.
 Definition exp_eq_dec (e1 e2 : exp) : {e1 = e2} + {e1 <> e2}.
   decide equality. Qed.
 
-Infix "#" := smk (at level 100, right associativity).
+Notation "a # b" := (smk _ a b) (at level 100, right associativity).
 Infix "@" := app (at level 500, left associativity).
 Notation "&" := var.
 
@@ -54,12 +54,12 @@ Inductive scoped_at (n : nat) : exp -> Prop :=
 | scope_app : forall f x, scoped_at n f -> scoped_at n x -> scoped_at n (f @ x)
 
 | scope_sigma : forall a b, scoped_at n a -> scoped_at (S n) b -> scoped_at n (sigma a b)
-| scope_smk : forall a b, scoped_at n a -> scoped_at n b -> scoped_at n (a # b)
+| scope_smk : forall B a b, scoped_at (S n) B -> scoped_at n a -> scoped_at n b -> scoped_at n (smk B a b)
 | scope_srec : forall c p s, scoped_at (S n) c -> scoped_at (2 + n) p -> scoped_at n s
                        -> scoped_at n (srec c p s)
 
 | scope_wt : forall a b, scoped_at n a -> scoped_at (S n) b -> scoped_at n (wt a b)
-| scope_sup : forall a f, scoped_at n a -> scoped_at (S n) f -> scoped_at n (sup a f)
+| scope_sup : forall B a f, scoped_at (S n) B -> scoped_at n a -> scoped_at (S n) f -> scoped_at n (sup B a f)
 | scope_wrec : forall c s w, scoped_at (S n) c -> scoped_at (3 + n) s -> scoped_at n w
                        -> scoped_at n (wrec c s w)
 
@@ -113,10 +113,10 @@ Fixpoint count_free (e : exp) : nat :=
     | lam A b => max (count_free A) (pred (count_free b))
     | (f @ x) => max (count_free f) (count_free x)
 
-    | (a # b) => max (count_free a) (count_free b)
+    | (smk B a b) => max (max (pred (count_free B)) (count_free a)) (count_free b)
     | srec c p s => max (max (pred (count_free c)) (pred (pred (count_free p)))) (count_free s)
 
-    | sup a f => max (count_free a) (pred (count_free f))
+    | sup B a f => max (max (pred (count_free B)) (count_free a)) (pred (count_free f))
     | wrec c s w => max (max (pred (count_free c)) (pred (pred (pred (count_free s))))) (count_free w)
 
     | brc c t f b => max (max (max (pred (count_free c)) (count_free t)) (count_free f)) (count_free b)
@@ -132,7 +132,6 @@ Lemma scoped_at_lift (e : exp) n (p : scoped_at n e) : forall m, n <= m -> scope
   induction p; intros; constructor; try apply IHp; try apply IHp1; try apply IHp2; try apply IHp3; try apply IHp4; omega.
 Qed.
 
-Print scoped_at_lift.
 Hint Resolve scoped_at_lift.
 Hint Resolve Nat.le_max_l Nat.le_max_r.
 
@@ -203,10 +202,10 @@ Fixpoint vars_op (op : forall(ix d : nat), exp) (d : nat) (e : exp) : exp :=
     | lam A b => lam (vars_op op d A) (vars_op op (S d) b)
     | (f @ x) => app (vars_op op d f) (vars_op op d x)
 
-    | (a # b) => smk (vars_op op d a) (vars_op op d b)
+    | (smk B a b) => smk (vars_op op (S d) B) (vars_op op d a) (vars_op op d b)
     | srec c p s => srec (vars_op op (S d) c) (vars_op op (2 + d) p) (vars_op op d s)
 
-    | sup a f => sup (vars_op op d a) (vars_op op (S d) f)
+    | sup B a f => sup (vars_op op (S d) B) (vars_op op d a) (vars_op op (S d) f)
     | wrec c s w => wrec (vars_op op (S d) c) (vars_op op (3 + d) s) (vars_op op d w)
 
     | brc c t f b => brc (vars_op op (S d) c) (vars_op op d t) (vars_op op d f) (vars_op op d b)
@@ -331,13 +330,13 @@ Program Fixpoint lookup_lt {A} (Gamma : list A) (i : {x | x < length Gamma}) : A
 Obligation 1. inversion H. Qed.
 Obligation 2. exact (le_S_n _ _ H). Defined.
 
-Print lookup_lt.
-
 Lemma lookup_irrel A (Gamma : list A) : forall i p q, lookup_lt Gamma (exist _ i p) = lookup_lt Gamma (exist _ i q).
   induction Gamma; [simpl;intros;exfalso;omega|]; destruct i; intros; simpl; eauto.
 Qed.
 
 Hint Rewrite lookup_irrel.
+
+Program Definition fsu {n} : {x | x < n} -> {x | x < S n} := S.
 
 Lemma lookup_cons A Gamma i : forall a, @lookup_lt A (a :: Gamma) (fsu i) = lookup_lt Gamma i.
   destruct i as [i Hi]; simpl; erewrite lookup_irrel; reflexivity. Qed.
@@ -360,7 +359,6 @@ Hint Resolve lookup_scoped.
 
 Program Definition lookup_wk (Gamma : con) (i : {x | x < length Gamma}) := wk_deep (S i) 0 (lookup_lt Gamma i).
 
-Check wk_scoped.
 Program Definition lookup_wk_scoped_prog (Gamma : {gamma | scoped_con gamma}) i : scoped_at (length Gamma) (lookup_wk Gamma i) :=
   wk_scoped (lookup_lt Gamma i) (length Gamma - S i) _ (S i) 0.
 
@@ -378,40 +376,39 @@ Definition wk_at n := wk_deep 1 n.
 Definition prop := typ 0.
 Definition set := typ 1.
 
-Print list.
-Infix "," := (fun Gamma a => cons a Gamma) (at level 50, left associativity).
+Infix "▻" := (fun Gamma a => cons a Gamma) (at level 50, left associativity).
 Infix "-->" := (fun a b => pi a (wk_at 0 b)) (at level 100, right associativity).
 
 Inductive has_type (Gamma : con) : exp -> exp -> Prop :=
 | ty_var : forall i p, has_type Gamma (var i) (lookup_wk Gamma (exist _ i p))
 
 | ty_set : forall n, has_type Gamma (typ n) (typ (S n))
-
+(* (* prop and cumulativity are /annoying/ *) 
 | ty_cumulative : forall A n, has_type Gamma A (typ n)
                        -> has_type Gamma A (typ (S n))
 
 | ty_pi_prop : forall A P n, has_type Gamma A (typ n)
-                      -> has_type (Gamma , A) P prop
+                      -> has_type (Gamma ▻ A) P prop
                       -> has_type Gamma (pi A P) prop
-
+*)
 | ty_pi_typ : forall A B n m, has_type Gamma A (typ n)
-                       -> has_type (Gamma , A) B (typ m)
+                       -> has_type (Gamma ▻ A) B (typ m)
                        -> has_type Gamma (pi A B) (typ (max n m))
 
 | ty_sg_typ : forall A B n m, has_type Gamma A (typ n)
-                       -> has_type (Gamma , A) B (typ m)
+                       -> has_type (Gamma ▻ A) B (typ m)
                        -> has_type Gamma (sigma A B) (typ (max n m))
 
 | ty_wt_typ : forall A B n m, has_type Gamma A (typ n)
-                       -> has_type (Gamma , A) B (typ m)
+                       -> has_type (Gamma ▻ A) B (typ m)
                        -> has_type Gamma (wt A B) (typ (max n m))
 
 | ty_bool : has_type Gamma bool set
 | ty_top : has_type Gamma top prop
-| ty_bot : has_type Gamma top bot
+| ty_bot : has_type Gamma bot prop
 
 | ty_lam : forall A n B b, has_type Gamma A (typ n)
-                    -> has_type (Gamma , A) b B
+                    -> has_type (Gamma ▻ A) b B
                     -> has_type Gamma (lam A b) (pi A B)
 
 | ty_app : forall A B f a, has_type Gamma f (pi A B)
@@ -420,19 +417,19 @@ Inductive has_type (Gamma : con) : exp -> exp -> Prop :=
 
 | ty_smk : forall A B a b, has_type Gamma a A
                     -> has_type Gamma b (subst_deep a 0 B)
-                    -> has_type Gamma (a # b) (sigma A B)
+                    -> has_type Gamma (smk B a b) (sigma A B)
 
-| ty_srec : forall A B C f s, has_type (Gamma , A , B) f (subst_deep (& 1 # & 0) 0 (wk_deep 2 1 C))
+| ty_srec : forall A B C f s, has_type (Gamma ▻ A ▻ B) f (subst_deep (smk B (& 1) (& 0)) 0 (wk_deep 2 1 C))
                       -> has_type Gamma s (sigma A B)
                       -> has_type Gamma (srec C f s) (subst_deep s 0 C)
 
 | ty_sup : forall A B n a f, has_type Gamma a A
-                      -> has_type (A :: Gamma) B (typ n)
-                      -> has_type (subst_deep a 0 B :: Gamma) f (wk_at 0 (wt A B))
-                      -> has_type Gamma (sup a f) (wt A B)
+                      -> has_type (Gamma ▻ A) B (typ n)
+                      -> has_type (Gamma ▻ subst_deep a 0 B) f (wk_at 0 (wt A B))
+                      -> has_type Gamma (sup B a f) (wt A B)
 
 | ty_wrec : forall C A B f w,
-             has_type (Gamma , A , (pi B (wk_deep 2 0 (wt A B))) , wk_at 1 B) f (subst_deep (& 1 @ & 0) 0 (wk_deep 3 1 C))
+             has_type (Gamma ▻ A ▻ (pi B (wk_deep 2 0 (wt A B))) ▻ wk_at 1 B) f (subst_deep (& 1 @ & 0) 0 (wk_deep 3 1 C))
            -> has_type Gamma w (wt A B)
            -> has_type Gamma (wrec C f w) (subst_deep w 0 C)
 
@@ -448,7 +445,7 @@ Inductive has_type (Gamma : con) : exp -> exp -> Prop :=
                    -> has_type Gamma t top
                    -> has_type Gamma (urec C u t) (subst_deep t 0 C)
 
-| ty_exf : forall C n f, has_type (bot :: Gamma) C (typ n)
+| ty_exf : forall C n f, has_type (Gamma ▻ bot) C (typ n)
                   -> has_type Gamma f bot
                   -> has_type Gamma (exf C f) (subst_deep f 0 C).
 
@@ -457,12 +454,12 @@ Hint Constructors has_type.
 
 Inductive wf_con : con -> Prop :=
 | wf_nil : wf_con nil
-| wf_cons : forall Gamma A n, wf_con Gamma -> Gamma ⊢ A ∈ (typ n) -> wf_con (Gamma , A).
+| wf_cons : forall Gamma A n, wf_con Gamma -> Gamma ⊢ A ∈ (typ n) -> wf_con (Gamma ▻ A).
 
 Hint Constructors wf_con.
 
 Theorem typed_implies_scoped : forall Gamma t T, scoped_con Gamma -> Gamma ⊢ t ∈ T -> scoped_at (length Gamma) T /\ scoped_at (length Gamma) t.
-Proof with eassumption.
+Proof with try eassumption.
   intros Gamma t T Hg.
   induction 1; auto; simpl in *; try (repeat constructor; auto; fail);
   try (destruct (IHhas_type Hg) as [IH1 IH2]);
@@ -473,15 +470,13 @@ Proof with eassumption.
   (* app is weird *)
   - split; try (constructor; auto).
     + inversion IH11; subst; apply subst_0_scoped...
-  - split; try (constructor;auto); eapply unsubst_scoped_O; [|eassumption]...
+  - split; try (constructor; auto); (eapply unsubst_scoped_O; [|eassumption])...
   (* recursion principles will take special handling *)
   - inversion IH21; subst. assert (Hg' : scoped_con (B :: A :: Gamma)) by auto. destruct (IHhas_type1 Hg') as [IH11 IH12].
     assert (IHC : scoped_at (S(length Gamma)) C).
-      + apply unwk_scoped with (n := 2) (d := 1); [omega|eapply unsubst_scoped]; try eassumption.
-        * omega.
-        * constructor; constructor; omega.
-    + split; auto.
-      * apply subst_0_scoped...
+      + apply unwk_scoped with (n := 2) (d := 1); [omega|eapply unsubst_scoped_O]; [|eassumption].
+        * constructor; [eapply scoped_at_lift; [eassumption|]; omega| |]; constructor; omega.
+      + split; [eapply subst_0_scoped; auto|constructor]...
   (* oh, and so will sup *)
   - destruct (IHhas_type2 (scope_cons _ _ Hg IH11)) as [IH21 IH22].
     assert (Hg'' : scoped_con (subst_deep a 0 B :: Gamma)).
