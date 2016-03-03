@@ -454,3 +454,23 @@ Theorem normal_forms_unique : forall e1 e2 e3, is_normal e2 -> is_normal e3 -> e
   destruct H as [e4 He4]; destruct He4 as [Hc1 Hc2]; destruct Hc1; destruct Hc2; auto;
   unfold is_normal in *; try_hyps; contradiction.
 Qed.
+
+Inductive nf : exp -> Prop :=
+| nf_var : forall i, nf (&i)
+| nf_typ : forall n, nf (typ n)
+| nf_pi : forall A B, nf A -> nf B -> nf (pi A B)
+| nf_sg : forall A B, nf A -> nf B -> nf (sigma A B)
+| nf_wt : forall A B, nf A -> nf B -> nf (wt A B)
+| nf_bool : nf bool
+| nf_top : nf top
+| nf_bot : nf bot
+| nf_lam : forall A b, nf A -> nf b -> nf (lam A b)
+| nf_smk : forall B a b, nf B -> nf a -> nf b -> nf (smk B a b)
+| nf_sup : forall B a f, nf B -> nf a -> nf f -> nf (sup B a f)
+| nf_true : nf true
+| nf_false : nf false
+| nf_unit : nf unit
+| nf_exf : forall B f, nf B -> nf f -> nf (exf B f).
+
+Lemma nf_normal : forall e, nf e -> is_normal e.
+  unfold is_normal; induction 1; inversion 1; subst; try_hyps; contradiction. Qed.
