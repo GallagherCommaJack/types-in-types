@@ -255,7 +255,7 @@ Lemma typ_conv : forall Gamma e t1 t2, t1 ===> t2 -> Gamma ⊢ e ∈ t1 <-> Gamm
     - eapply ty_step_from; [eassumption|]. eapply IHclos_refl_trans_1n; auto.
 Qed.
 
-Lemma ty_var_congr Gamma i T : Gamma ⊢ & (` i) ∈ T -> exists T', lookup_wk Gamma i ===> T' /\ T ===> T'.
+Lemma ty_var_confl Gamma i T : Gamma ⊢ & (` i) ∈ T -> exists T', lookup_wk Gamma i ===> T' /\ T ===> T'.
   remember (& (` i)) as i'; induction 1; inversion Heqi'; subst.
   - unfold lookup_wk; rewrite H0; erewrite lookup_irrel; eauto.
   - destruct (IHhas_type i eq_refl) as [t1' Ht]; destruct Ht;
@@ -264,13 +264,13 @@ Lemma ty_var_congr Gamma i T : Gamma ⊢ & (` i) ∈ T -> exists T', lookup_wk G
   - destruct (IHhas_type i eq_refl) as [t1' Ht]; destruct Ht; eauto.
 Qed.
 
-Lemma ty_typ_congr Gamma n T : Gamma ⊢ typ n ∈ T -> T ===> typ (S n).
+Lemma ty_typ_confl Gamma n T : Gamma ⊢ typ n ∈ T -> T ===> typ (S n).
   remember (typ n) as tn; induction 1; inversion Heqtn; subst; auto; specialize (IHhas_type eq_refl); eauto.
   - assert (exists t2', t2 ===> t2' /\ typ (S n) ===> t2') by (apply step_confluent with (e1 := t1); eauto).
     destruct H2 as [t2' Ht2']; destruct Ht2' as [Ht2' Htyp]; destruct Htyp as [|y z Htyp Ht']; eauto; inversion Htyp.
 Qed.
 
-Lemma ty_pi_congr Gamma A B T : Gamma ⊢ pi A B ∈ T -> exists n m, (Gamma ⊢ A ∈ typ n) /\ (Gamma ▻ A ⊢ B ∈ typ m) /\ T ===> typ (max n m).
+Lemma ty_pi_confl Gamma A B T : Gamma ⊢ pi A B ∈ T -> exists n m, (Gamma ⊢ A ∈ typ n) /\ (Gamma ▻ A ⊢ B ∈ typ m) /\ T ===> typ (max n m).
   remember (pi A B) as pab; induction 1; inversion Heqpab; subst; eauto; 
   destruct (IHhas_type eq_refl) as [n Hn]; destruct Hn as [m Hnm]; destruct Hnm as [Ha Hbt]; destruct Hbt as [Hb Ht];
   exists n; exists m; repeat split; eauto.
@@ -278,7 +278,7 @@ Lemma ty_pi_congr Gamma A B T : Gamma ⊢ pi A B ∈ T -> exists n m, (Gamma ⊢
     destruct H2 as [t2' Ht2']; destruct Ht2' as [Ht2' Htyp]; destruct Htyp as [|y z Htyp Ht']; eauto; inversion Htyp.
 Qed.
 
-Lemma ty_sg_congr Gamma A B T : Gamma ⊢ sigma A B ∈ T -> exists n m, (Gamma ⊢ A ∈ typ n) /\ (Gamma ⊢ B ∈ pi A (typ m)) /\ T ===> typ (max n m).
+Lemma ty_sg_confl Gamma A B T : Gamma ⊢ sigma A B ∈ T -> exists n m, (Gamma ⊢ A ∈ typ n) /\ (Gamma ⊢ B ∈ pi A (typ m)) /\ T ===> typ (max n m).
   remember (sigma A B) as pab; induction 1; inversion Heqpab; subst; eauto; 
   destruct (IHhas_type eq_refl) as [n Hn]; destruct Hn as [m Hnm]; destruct Hnm as [Ha Hbt]; destruct Hbt as [Hb Ht];
   exists n; exists m; repeat split; eauto.
@@ -286,7 +286,7 @@ Lemma ty_sg_congr Gamma A B T : Gamma ⊢ sigma A B ∈ T -> exists n m, (Gamma 
     destruct H2 as [t2' Ht2']; destruct Ht2' as [Ht2' Htyp]; destruct Htyp as [|y z Htyp Ht']; eauto; inversion Htyp.
 Qed.
 
-Lemma ty_wt_congr Gamma A B T : Gamma ⊢ wt A B ∈ T -> exists n m, (Gamma ⊢ A ∈ typ n) /\ (Gamma ⊢ B ∈ pi A (typ m)) /\ T ===> typ (max n m).
+Lemma ty_wt_confl Gamma A B T : Gamma ⊢ wt A B ∈ T -> exists n m, (Gamma ⊢ A ∈ typ n) /\ (Gamma ⊢ B ∈ pi A (typ m)) /\ T ===> typ (max n m).
   remember (wt A B) as pab; induction 1; inversion Heqpab; subst; eauto; 
   destruct (IHhas_type eq_refl) as [n Hn]; destruct Hn as [m Hnm]; destruct Hnm as [Ha Hbt]; destruct Hbt as [Hb Ht];
   exists n; exists m; repeat split; eauto.
@@ -294,54 +294,54 @@ Lemma ty_wt_congr Gamma A B T : Gamma ⊢ wt A B ∈ T -> exists n m, (Gamma ⊢
     destruct H2 as [t2' Ht2']; destruct Ht2' as [Ht2' Htyp]; destruct Htyp as [|y z Htyp Ht']; eauto; inversion Htyp.
 Qed.
 
-Lemma ty_bool_congr Gamma T : Gamma ⊢ bool ∈ T -> T ===> typ 0.
+Lemma ty_bool_confl Gamma T : Gamma ⊢ bool ∈ T -> T ===> typ 0.
   remember bool as b; induction 1; inversion Heqb; subst; eauto; specialize (IHhas_type eq_refl).
   - assert (exists t2', t2 ===> t2' /\ typ 0 ===> t2') by (apply step_confluent with (e1 := t1); eauto).
     destruct H2 as [t2' Ht2']; destruct Ht2' as [Ht2' Htyp]; destruct Htyp as [|y z Htyp Ht']; eauto; inversion Htyp.
 Qed.  
 
-Lemma ty_top_congr Gamma T : Gamma ⊢ top ∈ T -> T ===> typ 0.
+Lemma ty_top_confl Gamma T : Gamma ⊢ top ∈ T -> T ===> typ 0.
   remember top as b; induction 1; inversion Heqb; subst; eauto; specialize (IHhas_type eq_refl).
   - assert (exists t2', t2 ===> t2' /\ typ 0 ===> t2') by (apply step_confluent with (e1 := t1); eauto).
     destruct H2 as [t2' Ht2']; destruct Ht2' as [Ht2' Htyp]; destruct Htyp as [|y z Htyp Ht']; eauto; inversion Htyp.
 Qed.  
 
-Lemma ty_bot_congr Gamma T : Gamma ⊢ bot ∈ T -> T ===> typ 0.
+Lemma ty_bot_confl Gamma T : Gamma ⊢ bot ∈ T -> T ===> typ 0.
   remember bot as b; induction 1; inversion Heqb; subst; eauto; specialize (IHhas_type eq_refl).
   - assert (exists t2', t2 ===> t2' /\ typ 0 ===> t2') by (apply step_confluent with (e1 := t1); eauto).
     destruct H2 as [t2' Ht2']; destruct Ht2' as [Ht2' Htyp]; destruct Htyp as [|y z Htyp Ht']; eauto; inversion Htyp.
 Qed.
 
-Lemma ty_true_congr Gamma T : Gamma ⊢ true ∈ T -> T ===> bool.
+Lemma ty_true_confl Gamma T : Gamma ⊢ true ∈ T -> T ===> bool.
   remember true as b; induction 1; inversion Heqb; subst; eauto; specialize (IHhas_type eq_refl).
   - assert (exists t2', t2 ===> t2' /\ bool ===> t2') by (apply step_confluent with (e1 := t1); eauto).
     destruct H2 as [t2' Ht2']; destruct Ht2' as [Ht2' Htyp]; destruct Htyp as [|y z Htyp Ht']; eauto; inversion Htyp.
 Qed.
 
-Lemma ty_false_congr Gamma T : Gamma ⊢ false ∈ T -> T ===> bool.
+Lemma ty_false_confl Gamma T : Gamma ⊢ false ∈ T -> T ===> bool.
   remember false as b; induction 1; inversion Heqb; subst; eauto; specialize (IHhas_type eq_refl).
   - assert (exists t2', t2 ===> t2' /\ bool ===> t2') by (apply step_confluent with (e1 := t1); eauto).
     destruct H2 as [t2' Ht2']; destruct Ht2' as [Ht2' Htyp]; destruct Htyp as [|y z Htyp Ht']; eauto; inversion Htyp.
 Qed.
 
-Lemma ty_unit_congr Gamma T : Gamma ⊢ unit ∈ T -> T ===> top.
+Lemma ty_unit_confl Gamma T : Gamma ⊢ unit ∈ T -> T ===> top.
   remember unit as b; induction 1; inversion Heqb; subst; eauto; specialize (IHhas_type eq_refl).
   - assert (exists t2', t2 ===> t2' /\ top ===> t2') by (apply step_confluent with (e1 := t1); eauto).
     destruct H2 as [t2' Ht2']; destruct Ht2' as [Ht2' Htyp]; destruct Htyp as [|y z Htyp Ht']; eauto; inversion Htyp.
 Qed.
 
-Lemma wk_step_congr e1 e2 n d : e1 ==> e2 -> wk_deep n d e1 ===> wk_deep n d e2. auto. Qed.
-Lemma wk_eval_congr e1 e2 n d : e1 ===> e2 -> wk_deep n d e1 ===> wk_deep n d e2. 
-  induction 1; eauto; eapply rtc_rtc; [eapply wk_step_congr|]; eassumption. Qed.
+Lemma wk_step_cong e1 e2 n d : e1 ==> e2 -> wk_deep n d e1 ===> wk_deep n d e2. auto. Qed.
+Lemma wk_eval_cong e1 e2 n d : e1 ===> e2 -> wk_deep n d e1 ===> wk_deep n d e2. 
+  induction 1; eauto; eapply rtc_rtc; [eapply wk_step_cong|]; eassumption. Qed.
 
-Hint Resolve wk_eval_congr.
+Hint Resolve wk_eval_cong.
 
-Lemma con_var_congr Gamma T i t1 t2 (Ht : t1 ===> t2) : t1 :: Gamma ⊢ &i ∈ T <-> t2 :: Gamma ⊢ &i ∈ T.
+Lemma con_var_cong Gamma T i t1 t2 (Ht : t1 ===> t2) : t1 :: Gamma ⊢ &i ∈ T <-> t2 :: Gamma ⊢ &i ∈ T.
   remember (&i) as ix; split; intro Hi.
   - generalize dependent t2. remember (t1 :: Gamma) as gamma. induction Hi; inversion Heqgamma; inversion Heqix; subst; intros.
     + destruct i0 as [i Hi]; simpl in *.
       destruct i; unfold lookup_wk; simpl.
-      * eapply typ_conv; [eapply wk_eval_congr;eassumption|].
+      * eapply typ_conv; [eapply wk_eval_cong;eassumption|].
         replace (&0) with (&(` (exist (fun n => n < S (length Gamma)) 0 Hi))) by auto;
         replace (wk_deep 1 0 t2) with (lookup_wk (t2 :: Gamma) (exist _ 0 Hi)) by auto;
         constructor.
@@ -350,16 +350,16 @@ Lemma con_var_congr Gamma T i t1 t2 (Ht : t1 ===> t2) : t1 :: Gamma ⊢ &i ∈ T
     + specialize (IHHi eq_refl eq_refl).
 Admitted.
 
-Lemma con_cons_congr1 e : forall t1 t2, t1 ===> t2 -> forall Gamma T, (t1 :: Gamma) ⊢ e ∈ T <-> (t2 :: Gamma) ⊢ e ∈ T.
+Lemma con_cons_cong e : forall t1 t2, t1 ===> t2 -> forall Gamma T, (t1 :: Gamma) ⊢ e ∈ T <-> (t2 :: Gamma) ⊢ e ∈ T.
   induction e; intros; eauto.
   - split; inversion 1; subst; auto.
     + destruct i as [i Hi]; induction i.
 Admitted.
 
-Hint Resolve con_cons_congr1.
-Hint Rewrite con_cons_congr1.
+Hint Resolve con_cons_cong.
+Hint Rewrite con_cons_cong.
 
-Lemma ty_lam_congr Gamma e1 e2 T : Gamma ⊢ lam e1 e2 ∈ T -> exists A B, T ===> pi A B /\ (Gamma ▻ A ⊢ e2 ∈ B) /\ e1 ===> A.
+Lemma ty_lam_confl Gamma e1 e2 T : Gamma ⊢ lam e1 e2 ∈ T -> exists A B, T ===> pi A B /\ (Gamma ▻ A ⊢ e2 ∈ B) /\ e1 ===> A.
   intro Ht; remember (lam e1 e2) as lae; induction Ht; inversion Heqlae; subst; [repeat eexists;eauto| |];
   destruct (IHHt eq_refl) as [A Hb]; destruct Hb as [B Hab]; destruct Hab as [He2 Het];
   destruct Het as [He1 HT]; clear IHHt;
@@ -367,11 +367,11 @@ Lemma ty_lam_congr Gamma e1 e2 T : Gamma ⊢ lam e1 e2 ∈ T -> exists A B, T ==
   destruct Ht3 as [t3 Ht3]; destruct Ht3 as [H23 Hpi]; destr_logic; [|repeat eexists; eauto].
   - extend (eval_pi_pi Hpi); destr_logic; subst; destr_logic.
     repeat eexists; [eassumption| |].
-    + erewrite <- con_cons_congr1; [|eassumption];erewrite <- typ_conv; eassumption.
+    + erewrite <- con_cons_cong; [|eassumption];erewrite <- typ_conv; eassumption.
     + eapply rtc_rtc; eassumption.
 Qed.
 
-Lemma ty_sup_congr Gamma e1 e2 e3 T : 
+Lemma ty_sup_confl Gamma e1 e2 e3 T : 
   Gamma ⊢ sup e1 e2 e3 ∈ T -> exists A B, T ===> wt A B /\ e1 ===> B /\ (Gamma ⊢ e2 ∈ A) /\ (Gamma ⊢ e3 ∈ (B @ e2 --> wt A B)).
   intro Ht; remember (sup e1 e2 e3) as sae; induction Ht; inversion Heqsae; subst; [repeat eexists;eauto| |];
   destruct (IHHt eq_refl) as [A Hb]; destruct Hb as [B Hab]; destruct Hab as [Ht1 He]; destruct He as [Heb He3];
@@ -385,7 +385,7 @@ Lemma ty_sup_congr Gamma e1 e2 e3 T :
    |erewrite <- typ_conv; [eassumption|apply pi_rtc_cong; [apply app_rtc_cong|]; eauto]]).
 Qed.
 
-Lemma ty_smk_congr Gamma e1 e2 e3 T : 
+Lemma ty_smk_confl Gamma e1 e2 e3 T : 
   Gamma ⊢ smk e1 e2 e3 ∈ T -> exists A B, T ===> sigma A B /\ e1 ===> B /\ (Gamma ⊢ e2 ∈ A) /\ (Gamma ⊢ e3 ∈ B @ e2).
   intro Ht; remember (smk e1 e2 e3) as sae; induction Ht; inversion Heqsae; subst; [repeat eexists; eauto| |];
   destruct (IHHt eq_refl) as [A Hb]; destruct Hb as [B Hab]; destruct Hab as [Ht1 He]; destruct He as [Heb He3];
@@ -401,32 +401,111 @@ Qed.
 
 (* Lemma preservation : forall e1 e2, e1 ~> e2 -> forall Gamma t, Gamma ⊢ e1 ∈ t -> Gamma ⊢ e2 ∈ t. *)
 
-Hint Resolve ty_var_congr ty_typ_congr.
-Hint Resolve ty_pi_congr ty_sg_congr ty_wt_congr.
-Hint Resolve ty_lam_congr ty_sup_congr ty_smk_congr.
-Hint Resolve ty_top_congr ty_bot_congr ty_bool_congr.
-Hint Resolve ty_true_congr ty_false_congr ty_unit_congr.
+Hint Resolve ty_var_confl ty_typ_confl.
+Hint Resolve ty_top_confl ty_bot_confl ty_bool_confl.
+Hint Resolve ty_true_confl ty_false_confl ty_unit_confl.
+
+Lemma ty_app_confl Gamma f x T : Gamma ⊢ f @ x ∈ T -> exists A B T', (Gamma ⊢ f ∈ pi A B) /\ (Gamma ⊢ x ∈ A) /\ B |> x // 0 ===> T' /\ T ===> T'.
+  intro Ht; remember (f @ x) as fx; induction Ht; inversion Heqfx; subst; [repeat eexists; eauto| |];
+  destruct (IHHt eq_refl) as [A Hb]; destruct Hb as [B Ht']; destruct Ht' as [T' Ht'];
+  destr_logic; clear_funs;
+  assert (Ht3: exists t3, t2 ===> t3 /\ B |> x // 0 ===> t3)
+    by (assert (Ht2: exists t3', T' ===> t3' /\ t2 ===> t3') by (apply step_confluent with (e1 := t1); eauto);
+        destr_logic; eexists; split; [|eapply rtc_rtc]; eauto);
+  destr_logic; repeat eexists; repeat split; try eassumption; eauto.
+Qed.
+
+Lemma ty_srec_confl Gamma C s p T : 
+  Gamma ⊢ srec C s p ∈ T -> exists T', C @ p ===> T' /\ T ===> T'.
+  intro Ht; remember (srec C s p) as fx; induction Ht; inversion Heqfx; subst; [repeat eexists; eauto| |];
+  destruct (IHHt eq_refl) as [T' Ht']; 
+  destr_logic; clear_funs;
+  assert (Ht3: exists t3, t2 ===> t3 /\ C @ p ===> t3)
+    by (assert (Ht2: exists t3', T' ===> t3' /\ t2 ===> t3') by (apply step_confluent with (e1 := t1); eauto);
+        destr_logic; eexists; split; [|eapply rtc_rtc]; eauto);
+  destr_logic; repeat eexists; try eassumption; eauto.
+Qed.
+
+Lemma ty_wrec_confl Gamma C s w T :
+  Gamma ⊢ wrec C s w ∈ T -> exists T', C @ w ===> T' /\ T ===> T'.
+  intro Ht; remember (wrec C s w) as fx; induction Ht; inversion Heqfx; subst; [repeat eexists; eauto| |];
+  destruct (IHHt eq_refl) as [T' Ht']; destr_logic; clear_funs;
+  assert (Ht3: exists t3, t2 ===> t3 /\ C @ w ===> t3)
+    by (assert (Ht2: exists t3', T' ===> t3' /\ t2 ===> t3') by (apply step_confluent with (e1 := t1); eauto);
+        destr_logic; eexists; split; [|eapply rtc_rtc]; eauto);
+  destr_logic; repeat eexists; try eassumption; eauto.
+Qed.
+
+Lemma ty_brec_confl Gamma C t f b T : Gamma ⊢ brec C t f b ∈ T -> exists T', C @ b ===> T' /\ T ===> T'.
+  intro Ht; remember (brec C t f b) as fx; induction Ht; inversion Heqfx; subst; [repeat eexists; eauto| |];
+  destruct (IHHt eq_refl) as [T' Ht']; destr_logic; eauto.
+  assert (Ht3: exists t3, t2 ===> t3 /\ C @ b ===> t3)
+    by (assert (HT2: exists T'', T' ===> T'' /\ t2 ===> T'') by (apply step_confluent with (e1 := t1); eauto);
+        destr_logic; eexists; split; [|eapply rtc_rtc]; eauto).
+  destr_logic; eauto.
+Qed.
+
+Lemma ty_urec_confl Gamma C u t T : Gamma ⊢ urec C u t ∈ T -> exists T', C @ t ===> T' /\ T ===> T'.
+  intro Ht; remember (urec C u t) as fx; induction Ht; inversion Heqfx; subst; [repeat eexists; eauto| |];
+  destruct (IHHt eq_refl) as [T' Ht']; destr_logic; eauto.
+  assert (Ht3: exists t3, t2 ===> t3 /\ C @ t ===> t3)
+    by (assert (HT2: exists T'', T' ===> T'' /\ t2 ===> T'') by (apply step_confluent with (e1 := t1); eauto);
+        destr_logic; eexists; split; [|eapply rtc_rtc]; eauto).
+  destr_logic; eauto.
+Qed.
+
+Lemma ty_exf_confl Gamma C f T : Gamma ⊢ exf C f ∈ T -> exists T', C @ f ===> T' /\ T ===> T'.
+  intro Ht; remember (exf C f) as fx; induction Ht; inversion Heqfx; subst; [repeat eexists; eauto| |];
+  destruct (IHHt eq_refl) as [T' Ht']; destr_logic; eauto.
+  assert (Ht3: exists t3, t2 ===> t3 /\ C @ f ===> t3)
+    by (assert (HT2: exists T'', T' ===> T'' /\ t2 ===> T'') by (apply step_confluent with (e1 := t1); eauto);
+        destr_logic; eexists; split; [|eapply rtc_rtc]; eauto).
+  destr_logic; eauto.
+Qed.
 
 Lemma typ_confluent : forall Gamma e t1, Gamma ⊢ e ∈ t1 -> forall t2, Gamma ⊢ e ∈ t2 -> exists t3, t1 ===> t3 /\ t2 ===> t3.
   induction 1; intros t' Ht'; eauto.
-  - apply ty_pi_congr in Ht'; destr_logic; try_hyps; destr_logic; clear_funs;
+  - apply ty_pi_confl in Ht'; destr_logic; try_hyps; destr_logic; clear_funs;
     repeat match goal with [H: pi _ _ ===> _|-_] => extend (eval_pi_pi H) end; destr_logic; subst;
     repeat match goal with [H: typ _ ===> _|-_] => inversion H as [|y z H']; clear H; [subst|inversion H'] end;
     repeat match goal with [H: ?e1 = ?e2 |- _] => tryif (atomic e1; atomic e2) then fail else inversion H; subst; clear H end;
     eauto.
-  - apply ty_sg_congr in Ht'; destr_logic; try_hyps; destr_logic; clear_funs;
+  - apply ty_sg_confl in Ht'; destr_logic; try_hyps; destr_logic; clear_funs;
     repeat match goal with [H: pi _ _ ===> _|-_] => extend (eval_pi_pi H) end; destr_logic; subst;
     repeat match goal with [H: typ _ ===> _|-_] => inversion H as [|y z H']; clear H; [subst|inversion H'] end;
     repeat match goal with [H: ?e1 = ?e2 |- _] => tryif (atomic e1; atomic e2) then fail else inversion H; subst; clear H end;
     eauto.
-  - apply ty_wt_congr in Ht'; destr_logic; try_hyps; destr_logic; clear_funs;
+  - apply ty_wt_confl in Ht'; destr_logic; try_hyps; destr_logic; clear_funs;
     repeat match goal with [H: pi _ _ ===> _|-_] => extend (eval_pi_pi H) end; destr_logic; subst;
     repeat match goal with [H: typ _ ===> _|-_] => inversion H as [|y z H']; clear H; [subst|inversion H'] end;
     repeat match goal with [H: ?e1 = ?e2 |- _] => tryif (atomic e1; atomic e2) then fail else inversion H; subst; clear H end;
     eauto.
-  - apply ty_lam_congr in Ht'. shelve (* doesn't quite work - needs the correct context shift *).
-  (* not dealing with more cases for now *)
-Admitted.
+  - destruct (ty_lam_confl Ht') as [A' Hb]; destruct Hb as [B' Hab']; destruct Hab' as [Ha' Hb']; destruct Hb' as [Hb' Haa'].
+    erewrite <- con_cons_cong in Hb'; [|eassumption].
+    destruct (IHhas_type2 _ Hb') as [B'' Hbb]; destruct Hbb as [Hbb'' Hb'b''].
+    eexists; split; [eapply pi_rtc_cong|eapply rtc_rtc]; eauto.
+  - destruct (ty_app_confl Ht'); destr_logic.
+    extend (IHhas_type1 _ H1). extend (IHhas_type2 _ H2).
+    destr_logic.
+    repeat match goal with [H: pi _ _ ===> _|-_] => extend (eval_pi_pi H) end; destr_logic; subst;
+    repeat match goal with [H: ?e1 = ?e2 |- _] => tryif (atomic e1; atomic e2) then fail else inversion H; subst; clear H end.
+    assert (Hx': exists x', x5 |> a // 0 ===> x' /\ x1 ===> x')
+      by (apply step_confluent with (e1 := x0 |> a // 0); [apply subst_step_cong|]; assumption || auto).
+    destruct Hx' as [x' Hx']; destr_logic; exists x'; split; eapply rtc_rtc; try eapply subst_step_cong; eauto.
+  - destruct (ty_smk_confl Ht'); destr_logic. try_hyps; destr_logic; clear_funs.
+    exists (sigma x4 x0); split; [|eapply rtc_rtc]; eauto.
+  - eapply ty_srec_confl; eassumption.
+  - destruct (ty_sup_confl Ht'); destr_logic. try_hyps; destr_logic; clear_funs.
+    exists (wt x5 x0); split; [|eapply rtc_rtc]; eauto.
+  - eapply ty_wrec_confl; eassumption.
+  - eapply ty_brec_confl; eassumption.
+  - eapply ty_urec_confl; eassumption.
+  - eapply ty_exf_confl; eassumption.
+  - apply IHhas_type in Ht'; destr_logic.
+    assert (H3:exists t'', x ===> t'' /\ t2 ===> t'') by (eapply step_confluent; [eapply H1|eauto]).
+    destruct H3 as [t'' H3]; exists t''; destr_logic; split; [|eapply rtc_rtc]; eauto.
+  - apply IHhas_type in Ht'; destr_logic; eauto.
+Qed.
 
 Theorem preservation : forall Gamma e1 e2 T, e1 ===> e2 -> Gamma ⊢ e1 ∈ T <-> Gamma ⊢ e2 ∈ T.
 Admitted.
