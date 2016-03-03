@@ -1,10 +1,11 @@
 (* imports *)
 Require Import Omega Coq.Program.Program Coq.Program.Tactics.
-Require Import Unscoped Scoping Evaluation.
+Require Import Unscoped Scoping Evaluation DeBrujin.
 
 (* notations *)
 Open Scope list_scope.
 Infix "==" := (exp_eq_dec) (at level 50).
+Notation "⟦ xs ⟧" := (length xs).
 
 (* Program things *)
 Set Shrink Obligations.
@@ -14,17 +15,29 @@ Obligation Tactic := program_simpl; simpl in *; try omega.
 
 Set Implicit Arguments.
 
-Fixpoint lookup_con {A} (Gamma: list A) (i : nat) : A + {i >= length Gamma} :=
+Fixpoint lookup_con {A} (Gamma: list A) (i : nat) : option A :=
   match Gamma , i with
-    | nil , _ => inright (Peano.le_0_n i)
-    | (X :: Gamma) , 0 => inleft X
+    | nil , _ => None
+    | (X :: Gamma) , 0 => Some X
     | (X :: Gamma) , S n => match lookup_con Gamma n with
-                         | inleft T => inleft T
-                         | inright p => inright (le_n_S _ _ p)
+                         | Some T => Some T
+                         | None => None
                        end
   end.
 
-Definition forget_prop {A P} : A + {P} -> option A. destruct 1; [left|right]; auto. Defined.
+Lemma lookup_iff_ge {A} : forall Gamma i, @lookup_con A Gamma i = None <-> ⟦Gamma⟧ <= i.
+  induction Gamma; destruct i; simpl; split; intros; eauto; try omega.
+  - inversion H.
+  - specialize (IHGamma i). destruct (lookup_con Gamma i); [inversion H|apply IHGamma in H]; omega.
+  - specialize (IHGamma i). assert(H': length Gamma <= i) by omega. apply IHGamma in H'. rewrite H'. auto.
+Qed.
+
+Lemma lookup_iff_lt {A} : forall Gamma i, i < ⟦Gamma⟧ <-> exists a : A, lookup_con Gamma i = Some a.
+  split.
+  - remember (lookup_con Gamma i) as lgi; destruct lgi; [eauto|].
+    assert (⟦Gamma⟧ <= i) by (apply lookup_iff_ge; auto); omega.
+  - destruct (le_lt_dec ⟦Gamma⟧ i) as [Hle|Hlt]; [apply lookup_iff_ge in Hle|auto]; destruct 1; congruence.
+Qed.
 
 Program Fixpoint lookup_lt {A} (Gamma : list A) (i : {x | x < length Gamma}) : A :=
   match Gamma , i with
@@ -53,7 +66,7 @@ Theorem lookup_scoped (Gamma : con) (Hg : scoped_con Gamma) :
   - destruct i; simpl in *; [rewrite <- minus_n_O; auto|apply IHHg].
 Qed.
 
-Lemma lookup_lt_con A (Gamma : list A) : forall i, lookup_con Gamma (`i) = inleft (lookup_lt Gamma i).
+Lemma lookup_lt_con A (Gamma : list A) : forall i, lookup_con Gamma (`i) = Some (lookup_lt Gamma i).
   induction Gamma; intro i; simpl in i; destruct i as [i Hi]; [omega|]; destruct i; [reflexivity|].
   assert (H: i < length Gamma) by omega; specialize (IHGamma (exist _ i H)); simpl in *; 
   rewrite IHGamma; f_equal; apply lookup_irrel; auto.
@@ -155,13 +168,9 @@ where "Gamma ⊢ t ∈ T" := (has_type Gamma t T).
 
 Hint Constructors has_type.
 
-Notation "⟦ xs ⟧" := (length xs).
-
-Require Import DeBrujin.
-
 Hint Rewrite List.app_length.
 
-Lemma lookup_plus_option A : forall (Delta Gamma : list A) i, forget_prop (lookup_con Gamma i) = forget_prop (lookup_con (Delta ++ Gamma) (⟦Delta⟧ + i)).
+Lemma lookup_plus_option A : forall (Delta Gamma : list A) i, lookup_con Gamma i = lookup_con (Delta ++ Gamma) (⟦Delta⟧ + i).
   induction Delta; intros; auto.
   - rewrite IHDelta; simpl; destruct (lookup_con (Delta ++ Gamma) (⟦Delta⟧ + i)); auto. 
 Qed.
@@ -169,7 +178,7 @@ Qed.
 Definition wk_ix n d i : nat := if le_dec d i then n + i else i.
 
 Lemma lookup_plus_option2 A (Gamma Delta delta: list A) : forall i,
-  forget_prop (lookup_con (Gamma ++ Delta) i) = forget_prop (lookup_con (Gamma ++ delta ++ Delta) (wk_ix ⟦delta⟧ ⟦Gamma⟧ i)).
+  lookup_con (Gamma ++ Delta) i = lookup_con (Gamma ++ delta ++ Delta) (wk_ix ⟦delta⟧ ⟦Gamma⟧ i).
   intro i. unfold wk_ix. destruct (le_dec ⟦Gamma⟧ i) as [Hle|Hnle].
   - generalize dependent i; induction Gamma; intros; simpl in *.
     + apply lookup_plus_option.
@@ -190,15 +199,10 @@ Next Obligation. rewrite List.app_length. omega. Qed.
 (* this is complicated because chained reasoning that can only come together at the very end *)
 Lemma lookup_plus A (Gamma Delta : list A) : lookup_plus_ty Gamma Delta. 
   unfold lookup_plus_ty; intro i.
-  assert (H:inleft (lookup_lt Gamma i) = lookup_con Gamma (` i)) by (symmetry; apply lookup_lt_con).
-  apply (f_equal forget_prop) in H; simpl in H.
-  assert (H1: forget_prop (lookup_con Gamma (` i)) = forget_prop (lookup_con (Delta ++ Gamma) (⟦Delta⟧ + ` i))) by apply lookup_plus_option.
   assert (Hob: ⟦Delta⟧ + `i < ⟦Delta ++ Gamma⟧) by (rewrite  List.app_length; destruct i; simpl; omega).
-  assert (H2: lookup_con (Delta ++ Gamma) (⟦Delta⟧ + `i) = inleft (lookup_lt (Delta ++ Gamma) (exist _ (⟦Delta⟧ + ` i) Hob))) by
-    apply lookup_lt_con with (i := exist _ (⟦Delta⟧ + ` i) Hob).
-  apply (f_equal forget_prop) in H2; simpl in H2.
-  assert (H3: Some (lookup_lt Gamma i) = Some (lookup_lt (Delta ++ Gamma) (exist _ (⟦Delta⟧ + `i) Hob))) by congruence.
-  inversion H3. rewrite H4. apply lookup_irrel. auto.
+  assert (H:Some (lookup_lt Gamma i) = Some (lookup_lt (Delta ++ Gamma) (exist _ (⟦Delta⟧ + `i) Hob)))
+    by (repeat rewrite <- lookup_lt_con; apply lookup_plus_option).
+  inversion H as [H']; rewrite H'; apply lookup_irrel; reflexivity.
 Qed.
 
 Program Definition wk_ix_lt A delta Gamma {Delta:list A} (ix: {i | i < ⟦Gamma ++ Delta⟧}) : {i | i < ⟦Gamma ++ delta ++ Delta⟧} := wk_ix ⟦delta⟧ ⟦Gamma⟧ ix.
@@ -206,16 +210,11 @@ Obligation 1. repeat rewrite List.app_length in *; unfold wk_ix; destr_choices; 
 
 Lemma lookup_plus2 A (Gamma Delta delta : list A) : forall i, lookup_lt (Gamma ++ Delta) i = lookup_lt (Gamma ++ delta ++ Delta) (wk_ix_lt delta Gamma i).
   unfold wk_ix_lt; intro i.
-  Local Hint Resolve lookup_lt_con.
-  assert (H1: inleft (lookup_lt (Gamma ++ Delta) i) = lookup_con (Gamma ++ Delta) (` i)) by auto.
-  assert (H2: forget_prop (lookup_con (Gamma ++ Delta) (` i)) = forget_prop (lookup_con (Gamma ++ delta ++ Delta) (wk_ix ⟦delta⟧ ⟦Gamma⟧ (`i)))) by auto.
   assert (Hob: wk_ix ⟦delta⟧ ⟦Gamma⟧ (` i) < ⟦Gamma++delta++Delta⟧)
-   by (clear H1; destruct i; simpl in *; repeat rewrite List.app_length in *; unfold wk_ix; destr_choices; omega).
-  assert (H3: lookup_con (Gamma ++ delta ++ Delta) (wk_ix ⟦delta⟧ ⟦Gamma⟧ (`i)) = inleft (lookup_lt (Gamma ++ delta ++ Delta) (exist _ (wk_ix ⟦delta⟧ ⟦Gamma⟧ (`i)) Hob)))
-   by apply lookup_lt_con with (i := exist _ (wk_ix ⟦delta⟧ ⟦Gamma⟧ (`i)) Hob).
-  apply (f_equal forget_prop) in H1; apply (f_equal forget_prop) in H3; simpl in *.
-  assert (H:lookup_lt (Gamma ++ Delta) i = lookup_lt (Gamma ++ delta ++ Delta) (exist _ (wk_ix ⟦delta⟧ ⟦Gamma⟧ (`i)) Hob)) by congruence.
-  rewrite H; apply lookup_irrel; auto.
+   by (destruct i; simpl in *; repeat rewrite List.app_length in *; unfold wk_ix; destr_choices; omega).
+  assert (H:Some (lookup_lt (Gamma ++ Delta) i) = Some (lookup_lt (Gamma ++ delta ++ Delta) (exist _ (wk_ix ⟦delta⟧ ⟦Gamma⟧ (`i)) Hob)))
+   by (repeat rewrite <- lookup_lt_con; apply lookup_plus_option2).
+  inversion H as [H']; rewrite H'; apply lookup_irrel; reflexivity.
 Qed.
 
 Hint Resolve lookup_plus lookup_plus2.
