@@ -380,6 +380,70 @@ Lemma eval_sup_sup e1 e2 e3 e4 (p : sup e1 e2 e3 ===> e4) : exists e5 e6 e7, e4 
     + specialize (IHp e1 e2 e3' eq_refl); destr_logic; subst; repeat eexists; eauto.
 Qed.
 
+Lemma subst_step_cong : forall e1 e1' e2 e2' d, e1 ===> e1' -> e2 ===> e2' -> e1 |> e2 // d ===> e1' |> e2' // d.
+  repeat induction 1; [eauto| | |];
+  match goal with [H: _ ==> _|-_] => extend (step_par H) end;
+  try (repeat match goal with 
+           | [H: ?e1 ~> ?e2 |- ?e1 |> _ // _ ===> _ |> _ // _] => 
+             eapply subst1_par_cong in H; eapply par_step_rtc in H; eapply rtc_rtc; [eapply H|]
+           | [H: ?e1 ~> ?e2 |- _ |> ?e1 // _ ===> _ |> _ // _] => 
+             eapply subst2_par_cong in H; eapply par_step_rtc in H; eapply rtc_rtc; [eapply H|]
+         end; eauto; fail).
+  eapply rtc_rtc; [apply par_step_rtc; apply subst1_par_cong|apply IHclos_refl_trans_1n]; eauto.
+Qed.
+
+Lemma eval_app e1 e2 e3 (p: e1 @ e2 ===> e3) : (exists e4 e5, e3 = e4 @ e5 /\ e1 ===> e4 /\ e2 ===> e5) 
+                                               \/ (exists e4 e5, e1 ===> lam e4 e5 /\ e5 |> e2 // 0 ===> e3).
+  remember (e1 @ e2) as e12; generalize dependent e2; generalize dependent e1; 
+  induction p; intros; subst; [left;eauto|].
+  - inversion H; subst; eauto; destruct (IHp _ _ eq_refl);
+    destr_logic; [left|right|left|right]; subst; repeat eexists; eauto.
+    + eapply rtc_rtc; [eapply subst_step_cong|eassumption]; eauto.
+Qed.
+
+Lemma eval_srec e1 e2 e3 e4 (p : srec e1 e2 e3 ===> e4) : 
+  (exists e5 e6 e7, e4 = srec e5 e6 e7 /\ e1 ===> e5 /\ e2 ===> e6 /\ e3 ===> e7)
+  \/ (exists e5 e6 e7, e3 ===> smk e5 e6 e7 /\ e2 @ e6 @ e7 ===> e4).
+  remember (srec e1 e2 e3) as e12; generalize dependent e3; generalize dependent e2; generalize dependent e1; 
+  induction p; intros; subst; [left;repeat eexists;eauto|].
+  - inversion H; subst; eauto; try destruct (IHp _ _ _ eq_refl);
+    destr_logic; subst; try (left; repeat eexists; eauto; fail); right; repeat eexists; eauto.
+Qed.
+
+Lemma eval_wrec e1 e2 e3 e4 (p : wrec e1 e2 e3 ===> e4) : 
+  (exists e5 e6 e7, e4 = wrec e5 e6 e7 /\ e1 ===> e5 /\ e2 ===> e6 /\ e3 ===> e7)
+  \/ (exists e5 e6 e7, e3 ===> sup e5 e6 e7 /\ 
+                 e2 @ e6 @ lam (e5 @ e6) (wrec (wk_deep 1 0 e1) (wk_deep 1 0 e2) (wk_deep 1 0 e7 @ &0)) ===> e4).
+  remember (wrec e1 e2 e3) as e12; generalize dependent e3; generalize dependent e2; generalize dependent e1; 
+  induction p; intros; subst; [left;repeat eexists;eauto|].
+  - inversion H; subst; eauto; try destruct (IHp _ _ _ eq_refl);
+    destr_logic; subst; try (left; repeat eexists; eauto; fail); 
+    right; repeat eexists; eassumption || eauto;
+    (eapply rtc_rtc; [|eassumption]);
+    repeat (apply app_rtc_cong || apply lam_rtc_cong || apply wrec_rtc_cong); eauto.
+Qed.
+
+Lemma eval_brec e1 e2 e3 e4 e5 (p: brec e1 e2 e3 e4 ===> e5) :
+  (exists e6 e7 e8 e9, e5 = brec e6 e7 e8 e9 /\ e1 ===> e6 /\ e2 ===> e7 /\ e3 ===> e8 /\ e4 ===> e9)
+  \/ (e4 ===> true /\ e2 ===> e5) \/ (e4 ===> false /\ e3 ===> e5).
+  remember (brec e1 e2 e3 e4) as e12; 
+  generalize dependent e4; generalize dependent e3; generalize dependent e2; generalize dependent e1; 
+  induction p; intros; subst; [left;repeat eexists;eauto|].
+  - inversion H; subst; eauto; try destruct (IHp _ _ _ _ eq_refl);
+    destr_logic; subst; try (left; repeat eexists; eauto; fail); 
+    right; repeat eexists; eassumption || eauto.
+Qed.
+
+Lemma eval_urec e1 e2 e3 e4 (p: urec e1 e2 e3 ===> e4) :
+  (exists e5 e6 e7, e4 = urec e5 e6 e7 /\ e1 ===> e5 /\ e2 ===> e6 /\ e3 ===> e7)
+  \/ (e3 ===> unit /\ e2 ===> e4).
+  remember (urec e1 e2 e3) as e12; generalize dependent e3; generalize dependent e2; generalize dependent e1; 
+  induction p; intros; subst; [left;repeat eexists;eauto|].
+  - inversion H; subst; eauto; try destruct (IHp _ _ _ eq_refl);
+    destr_logic; subst; try (left; repeat eexists; eauto; fail); 
+    right; repeat eexists; eassumption || eauto.
+Qed.
+
 Definition is_normal e : Prop := forall e', ~ e ==> e'.
 
 Hint Unfold is_normal.
