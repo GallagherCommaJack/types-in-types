@@ -1,11 +1,12 @@
 (* imports *)
 Require Import Omega Coq.Program.Program Coq.Program.Tactics.
-Require Import Unscoped Scoping Evaluation DeBrujin.
+Require Import Unscoped Evaluation DeBrujin.
 
 (* notations *)
 Open Scope list_scope.
 Infix "==" := (exp_eq_dec) (at level 50).
 Notation "⟦ xs ⟧" := (length xs).
+Notation "<< x , y >>" := (exist _ x y).
 
 (* Program things *)
 Set Shrink Obligations.
@@ -58,32 +59,34 @@ Lemma lookup_cons A Gamma i : forall a, @lookup_lt A (a :: Gamma) (fsu i) = look
   destruct i as [i Hi]; simpl; intros; apply lookup_irrel; reflexivity. Qed.
 
 Hint Rewrite lookup_cons.
-
+(*
 Theorem lookup_scoped (Gamma : con) (Hg : scoped_con Gamma) :
   forall i (Hi : i < length Gamma), scoped_at (length Gamma - S i) (lookup_lt Gamma (exist _ i Hi)).
   Hint Rewrite <- minus_n_O.
   induction Hg; try (inversion Hi; fail); intros.
   - destruct i; simpl in *; [rewrite <- minus_n_O; auto|apply IHHg].
 Qed.
-
+*)
 Lemma lookup_lt_con A (Gamma : list A) : forall i, lookup_con Gamma (`i) = Some (lookup_lt Gamma i).
   induction Gamma; intro i; simpl in i; destruct i as [i Hi]; [omega|]; destruct i; [reflexivity|].
   assert (H: i < length Gamma) by omega; specialize (IHGamma (exist _ i H)); simpl in *; 
   rewrite IHGamma; f_equal; apply lookup_irrel; auto.
 Qed.  
   
-Hint Resolve lookup_scoped.
+(* Hint Resolve lookup_scoped. *)
+
+Definition con := list exp.
 
 Program Definition lookup_wk (Gamma : con) (i : {x | x < length Gamma}) := wk_deep (S i) 0 (lookup_lt Gamma i).
 
-Program Definition lookup_wk_scoped_subset (Gamma : {gamma | scoped_con gamma}) i : scoped_at (length Gamma) (lookup_wk Gamma i) :=
-  wk_scoped (lookup_lt Gamma i) (length Gamma - S i) _ (S i) 0.
+(* Program Definition lookup_wk_scoped_subset (Gamma : {gamma | scoped_con gamma}) i : scoped_at (length Gamma) (lookup_wk Gamma i) := *)
+(*   wk_scoped (lookup_lt Gamma i) (length Gamma - S i) _ (S i) 0. *)
 
-(* split for nicer proof terms *)
-Lemma lookup_wk_scoped (Gamma : con) (p : scoped_con Gamma) : forall i, scoped_at (length Gamma) (lookup_wk Gamma i).
-  apply (lookup_wk_scoped_subset (exist _ Gamma p)). Qed.
+(* (* split for nicer proof terms *) *)
+(* Lemma lookup_wk_scoped (Gamma : con) (p : scoped_con Gamma) : forall i, scoped_at (length Gamma) (lookup_wk Gamma i). *)
+(*   apply (lookup_wk_scoped_subset (exist _ Gamma p)). Qed. *)
 
-Hint Resolve lookup_wk_scoped.
+(* Hint Resolve lookup_wk_scoped. *)
 
 Infix "▻" := (fun Gamma a => cons a Gamma) (at level 50, left associativity).
 Infix "-->" := (fun a b => pi a (wk_deep 1 0 b)) (at level 20, right associativity).
@@ -91,7 +94,7 @@ Infix "-->" := (fun a b => pi a (wk_deep 1 0 b)) (at level 20, right associativi
 Reserved Notation "Gamma ⊢ t ∈ T" (at level 85).
 
 Inductive has_type (Gamma: con) : exp -> exp -> Prop :=
-| ty_var : forall i, Gamma ⊢ & (` i) ∈ lookup_wk Gamma i
+| ty_var : forall i p, Gamma ⊢ & i ∈ lookup_wk Gamma << i , p >>
 
 | ty_set : forall n, Gamma ⊢ typ n ∈ typ (S n)
 (* (* for now, how about no? *)
@@ -226,23 +229,6 @@ Lemma wk_ix_deep : forall n d i, wk_deep n d (&i) = &(wk_ix n d i).
 Lemma wk_ix_lt_eq A : forall Gamma delta Delta i, ` (@wk_ix_lt A delta Gamma Delta i) = wk_ix ⟦delta⟧ ⟦Gamma⟧ (` i).
   reflexivity. Qed.
 
-Lemma wk_typed e : forall T Gamma Delta, Gamma ++ Delta ⊢ e ∈ T -> forall delta, Gamma ++ delta ++ Delta ⊢ wk_deep ⟦delta⟧ ⟦Gamma⟧ e ∈ wk_deep ⟦delta⟧ ⟦Gamma⟧ T.
-(* (* yuck - we'll just admit this for now *)
-  induction e; inversion 1; subst; intros.
-  - rewrite wk_ix_deep. unfold wk_ix. destruct (le_dec ⟦Gamma⟧ (`i)) as [Hle|Hnle].
-    + unfold lookup_wk in *. rewrite lookup_plus2 with (delta := delta) in *. unfold wk_ix_lt; unfold wk_ix; simpl.
-      assert (H0: ⟦delta⟧ + `i < ⟦Gamma ++ delta ++ Delta ⟧) by (clear H; destruct i; simpl in *; repeat rewrite List.app_length in *; omega).
-      erewrite lookup_irrel; [|instantiate (j := exist _ (⟦delta⟧+(`i)) H0); simpl; destr_choices; omega].
-      rewrite wk_deep_wk; [|omega]. rewrite <- plus_n_Sm.
-      destruct i as [i Hi]; simpl in *.
-      replace (wk_deep (S (⟦ delta ⟧ + i)) 0
-       (lookup_lt (Gamma ++ delta ++ Delta)
-          (exist (fun x : nat => x < ⟦ Gamma ++ delta ++ Delta ⟧)
-             (⟦ delta ⟧ + i) H0))) with (lookup_wk (Gamma ++ delta ++ Delta) (exist _ (⟦delta⟧+i) H0)) by auto. 
-      replace (& (⟦ delta ⟧ + i)) with (& (` (exist (fun i => i < ⟦Gamma ++ delta ++ Delta⟧) (⟦delta⟧+i) H0))) by auto.
-      apply ty_var.
-    + *) Admitted.
-
 Inductive wf_con : con -> Prop :=
 | wf_nil : wf_con nil
 | wf_cons : forall Gamma A n, wf_con Gamma -> Gamma ⊢ A ∈ (typ n) -> wf_con (Gamma ▻ A).
@@ -255,13 +241,13 @@ Lemma typ_conv : forall Gamma e t1 t2, t1 ===> t2 -> Gamma ⊢ e ∈ t1 <-> Gamm
     - eapply ty_step_from; [eassumption|]. eapply IHclos_refl_trans_1n; auto.
 Qed.
 
-Lemma ty_var_confl Gamma i T : Gamma ⊢ & (` i) ∈ T -> exists T', lookup_wk Gamma i ===> T' /\ T ===> T'.
-  remember (& (` i)) as i'; induction 1; inversion Heqi'; subst.
-  - unfold lookup_wk; rewrite H0; erewrite lookup_irrel; eauto.
-  - destruct (IHhas_type i eq_refl) as [t1' Ht]; destruct Ht;
-    assert (exists t2', t2 ===> t2' /\ t1' ===> t2') by (apply step_confluent with (e1 := t1); eauto);
-    destr_logic; eexists; split; [eapply rtc_rtc|]; eassumption.
-  - destruct (IHhas_type i eq_refl) as [t1' Ht]; destruct Ht; eauto.
+Lemma ty_var_confl Gamma i T : Gamma ⊢ & i ∈ T -> exists T' p, lookup_wk Gamma << i , p >> ===> T' /\ T ===> T'.
+  remember (& i) as i'; induction 1; inversion Heqi'; subst.
+  - eexists; eauto.
+  - destruct (IHhas_type eq_refl) as [t1' Ht]; destr_logic.
+    assert (exists t2', t2 ===> t2' /\ t1' ===> t2') by (apply step_confluent with (e1 := t1); eauto).
+    destr_logic; repeat eexists; [eapply rtc_rtc|]; eassumption.
+  - destruct (IHhas_type eq_refl); destr_logic; eauto.
 Qed.
 
 Lemma ty_typ_confl Gamma n T : Gamma ⊢ typ n ∈ T -> T ===> typ (S n).
@@ -338,22 +324,20 @@ Hint Resolve wk_eval_cong.
 
 Lemma con_var_cong Gamma T i t1 t2 (Ht : t1 ===> t2) : t1 :: Gamma ⊢ &i ∈ T <-> t2 :: Gamma ⊢ &i ∈ T.
   remember (&i) as ix; split; intro Hi.
-  - generalize dependent t2. remember (t1 :: Gamma) as gamma. induction Hi; inversion Heqgamma; inversion Heqix; subst; intros.
-    + destruct i0 as [i Hi]; simpl in *.
-      destruct i; unfold lookup_wk; simpl.
+  - generalize dependent t2; remember (t1 :: Gamma) as gamma; induction Hi; inversion Heqgamma; inversion Heqix; subst; intros.
+    + destruct i; unfold lookup_wk; simpl.
       * eapply typ_conv; [eapply wk_eval_cong;eassumption|].
-        replace (&0) with (&(` (exist (fun n => n < S (length Gamma)) 0 Hi))) by auto;
-        replace (wk_deep 1 0 t2) with (lookup_wk (t2 :: Gamma) (exist _ 0 Hi)) by auto;
+        replace (⟦ t1 :: Gamma ⟧) with (⟦ t2 :: Gamma ⟧) in p by auto;
+        replace (wk_deep 1 0 t2) with (lookup_wk (t2 :: Gamma) <<0, p>>) by auto.
         constructor.
-      * replace (&(S i)) with (& (` (exist (fun n => n < ⟦t2 :: Gamma⟧) (S i) Hi))) by auto.
-        rewrite <- lookup_cons with (a := t2). unfold fsu. erewrite lookup_irrel. apply ty_var. auto.
-    + specialize (IHHi eq_refl eq_refl).
+      * rewrite <- lookup_cons with (a := t2). unfold fsu; erewrite lookup_irrel; [apply ty_var|auto].
+    + specialize (IHHi eq_refl eq_refl). 
 Admitted.
 
 Lemma con_cons_cong e : forall t1 t2, t1 ===> t2 -> forall Gamma T, (t1 :: Gamma) ⊢ e ∈ T <-> (t2 :: Gamma) ⊢ e ∈ T.
   induction e; intros; eauto.
   - split; inversion 1; subst; auto.
-    + destruct i as [i Hi]; induction i.
+    + induction ix.
 Admitted.
 
 Hint Resolve con_cons_cong.
@@ -465,6 +449,7 @@ Qed.
 
 Lemma typ_confluent : forall Gamma e t1, Gamma ⊢ e ∈ t1 -> forall t2, Gamma ⊢ e ∈ t2 -> exists t3, t1 ===> t3 /\ t2 ===> t3.
   induction 1; intros t' Ht'; eauto.
+  - apply ty_var_confl in Ht'; destr_logic; unfold lookup_wk; erewrite lookup_irrel; eauto.
   - apply ty_pi_confl in Ht'; destr_logic; try_hyps; destr_logic; clear_funs;
     repeat match goal with [H: pi _ _ ===> _|-_] => extend (eval_pi_pi H) end; destr_logic; subst;
     repeat match goal with [H: typ _ ===> _|-_] => inversion H as [|y z H']; clear H; [subst|inversion H'] end;
@@ -506,20 +491,3 @@ Lemma typ_confluent : forall Gamma e t1, Gamma ⊢ e ∈ t1 -> forall t2, Gamma 
     destruct H3 as [t'' H3]; exists t''; destr_logic; split; [|eapply rtc_rtc]; eauto.
   - apply IHhas_type in Ht'; destr_logic; eauto.
 Qed.
-
-Theorem preservation : forall Gamma e1 e2 T, e1 ===> e2 -> Gamma ⊢ e1 ∈ T <-> Gamma ⊢ e2 ∈ T.
-Admitted.
-
-(* this induction principle won't quite work - should be a fixpoint, but not yet sure what the measure should be *)
-(* => would be wrong since there are nonterminating (but untyped) programs... hmmm... *)
-
-Theorem ty_normal : forall Gamma e T, Gamma ⊢ e ∈ T -> exists e', e ===> e' /\ is_normal e'.
-  induction 1; auto; try (eexists; split; eauto; inversion 1; fail).
-  - destr_logic; exists (pi x0 x); split; [apply pi_rtc_cong|inversion 1; subst]; unfold is_normal in *; try_hyps; eauto.
-  - destr_logic; exists (sigma x0 x); split; [apply sg_rtc_cong|inversion 1; subst]; unfold is_normal in *; try_hyps; eauto.
-  - destr_logic; exists (wt x0 x); split; [apply wt_rtc_cong|inversion 1; subst]; unfold is_normal in *; try_hyps; eauto.
-  - destr_logic; exists (lam x0 x); split; [apply lam_rtc_cong|inversion 1; subst]; unfold is_normal in *; try_hyps; eauto.
-Admitted.
-
-Theorem ty_check : forall Gamma e, {T | Gamma ⊢ e ∈ T} + {forall T, ~ (Gamma ⊢ e ∈ T)}.
-Admitted.

@@ -1,4 +1,4 @@
-Require Export Arith.
+Require Export Arith Tactics.
 
 Inductive exp : Set :=
 | var : forall(ix : nat), exp
@@ -37,22 +37,6 @@ Definition exp_size (e : exp) : nat.
            | [IH : nat |- _] => apply (fun x => x + IH); clear IH
          end; apply 0. Defined.
  (* I think this definition is pretty cool :) *)
-
-Ltac destr_sums :=
-  repeat match goal with
-           | [ H :  _  + {_} |- _ ] => destruct H
-           | [ H :  _  +  _  |- _ ] => destruct H
-           | [ H : {_} + {_} |- _ ] => destruct H
-         end.
-
-Ltac Inster_all := repeat
-  match goal with
-    | [ H : forall x : ?T, _ |- _ ] =>
-      let x := fresh "x" in
-      evar (x : T);
-        let x' := eval unfold x in x in
-            clear x; specialize (H x')
-  end.
 
 Notation "a # b" := (smk _ a b) (at level 20, right associativity).
 Infix "@" := app (at level 15, left associativity).
@@ -129,22 +113,6 @@ Transparent subst_deep.
 Transparent subst_var.
 Notation "x |> v // d" := (subst_deep v d x) (left associativity, at level 40).
 Hint Unfold subst_deep subst_var.
-
-
-Ltac destr_goal_if :=
-  match goal with 
-    | [|- context[if ?c then _ else _]] => destruct c; simpl
-  end.
-
-Ltac destr_goal_sum :=
-  match goal with
-    | [|- context[?s]] => match type of s with
-                          | {_} + {_} => destruct s
-                          | _ + {_} => destruct s
-                        end
-  end.
-
-Tactic Notation "destr_choices" := repeat (destr_goal_if || destr_goal_sum; simpl).
 
 Lemma wk_var_fold : forall n, (fun d ix => if le_dec d ix then &(n + ix) else &ix) = wk_var n. reflexivity. Qed.
 Lemma subst_var_fold : forall v, (fun d i => match lt_eq_lt_dec i d with
