@@ -1,5 +1,4 @@
-Require Export Unscoped Evaluation.
-Require Import Omega.
+Require Export Unscoped Evaluation Typing.
 
 (* Scoping relation and DeBrujin lemmas live here *)
 Inductive scoped_at (n : nat) : exp -> Prop :=
@@ -40,7 +39,7 @@ Definition scope_check_at (n : nat) (e : exp) : {scoped_at n e} + {~ scoped_at n
   (* Local Hint Extern 5 => match goal with [H : scoped_at _ _ |- _] => inversion H end. *)
   generalize dependent n; induction e; intro n;
   try (destruct (lt_dec ix n); [left|right]; auto; inversion 1; auto);
-  Inster_all; destr_sums; try (left; constructor; eassumption); right; inversion 1; subst; auto.
+  Inster_all; destr_hyps; try (left; constructor; eassumption); right; inversion 1; subst; auto.
 Defined.
 
 Fixpoint count_free (e : exp) : nat :=
@@ -67,7 +66,7 @@ Fixpoint count_free (e : exp) : nat :=
   end.
 
 Lemma scoped_at_lift (e : exp) n (p : scoped_at n e) : forall m, n <= m -> scoped_at m e.
-  induction p; intros; constructor; try apply IHp; try apply IHp1; try apply IHp2; try apply IHp3; try apply IHp4; omega.
+  induction p; intros; constructor; try (apply IHp || apply IHp1 || apply IHp2 || apply IHp3 || apply IHp4); omega.
 Qed.
 
 Hint Resolve scoped_at_lift.
@@ -92,6 +91,7 @@ Ltac le_max :=
   match goal with
     | [|- ?d <= max ?n ?m] => (eapply max_trans_l; try le_max; omega; fail) || (eapply max_trans_r; try le_max; omega; fail)
   end.
+
 Theorem scoped_at_count (e : exp) : scoped_at (count_free e) e.
   Local Hint Resolve le_n_S.
   Local Hint Resolve le_S_pred.
@@ -186,24 +186,14 @@ Qed.
 
 Hint Resolve unwk_scoped.
 
-Lemma unsubst_scoped : forall e v d n, d <= n -> scoped_at (n - d) v -> scoped_at n (e |> v // d) -> scoped_at (S n) e.
-  induction e; intros v d n Hd Hv He; unfold subst_deep in *; simpl in *;
-  (* var case always takes some special care *)
-  try (unfold subst_var in *; simpl in *;
-       destruct (lt_eq_lt_dec ix d) as [Hle|Hgt]; [destruct Hle as [Hlt|Heq]|]; inversion He; constructor; omega);
-  (* invert things and split *)
-  inversion He; subst; repeat constructor;
-  (* try all IH's *)
-  try eapply (IHe v); try eapply (IHe1 v); try eapply (IHe2 v); try eapply (IHe3 v); try eapply (IHe4 v);
-  match goal with
-    (* use ordering cases to instantiate d *)
-    | [|- _ <= _] => repeat (try apply Hd; apply le_n_S in Hd)
-    | _ => assumption (* otherwise it'll just be a piece of He *)
- end.
+Lemma unsubst_scoped : forall e v d n, d <= n -> scoped_at n (e |> v // d) -> scoped_at (S n) e.
+  induction e; unfold subst_deep; simpl; intros v d n Hd He; fold_ops; auto;
+  try (inversion He; subst; constructor; eauto; fail).
+  - constructor; unfold_ops; destruct (lt_eq_lt_dec ix d) as [Hle|Hgt]; [destruct Hle|]; inversion He; omega.
 Qed.
 
-Lemma unsubst_0_scoped : forall e v n, scoped_at n v -> scoped_at n (e |> v // 0) -> scoped_at (S n) e.
-  intros e v n Hv He; apply unsubst_scoped in He; try rewrite <- minus_n_O; try assumption; omega. Qed.
+Lemma unsubst_0_scoped : forall e v n, scoped_at n (e |> v // 0) -> scoped_at (S n) e.
+  intros e v n He; apply unsubst_scoped in He; try rewrite <- minus_n_O; try assumption; omega. Qed.
 
 Lemma wk_above_scope : forall e n1 n2 d, n1 <= d -> scoped_at n1 e -> wk_deep n2 d e = e.
   intros e n1 n2 d Hd He; generalize dependent n2; generalize dependent d; induction He;
@@ -219,20 +209,36 @@ Qed.
 
 (* Evaluation preserves scope *)
 Ltac invert_atom_scopes :=
-  repeat match goal with [H: scoped_at _ ?e |- _] => tryif atomic e then fail else (inversion H; subst; clear H) end.
+  match goal with [H: scoped_at _ ?e |- _] => tryif atomic e then fail else (inversion H; subst; clear H) end.
 
-Theorem step_scoped : forall e1 e2, e1 ==> e2 -> forall n, scoped_at n e1 -> scoped_at n e2.
-  induction 1; auto; intros; invert_atom_scopes; try_hyps; repeat (constructor;(omega || auto));
+Lemma step_scoped : forall e1 e2, e1 ==> e2 -> forall n, scoped_at n e1 -> scoped_at n e2.
+  induction 1; auto; intros; repeat invert_atom_scopes; try_hyps; repeat (constructor;(omega || auto));
   try apply subst_0_scoped; try apply wk_1_scoped; assumption.
 Qed.
 
+Hint Resolve step_scoped.
+
+Lemma scoped_S : forall e n, scoped_at n e -> scoped_at (S n) e.
+  induction 1; auto. Qed.
+
+Hint Resolve scoped_S.
+
 Theorem eval_scoped : forall e1 e2, e1 ===> e2 -> forall n, scoped_at n e1 -> scoped_at n e2.
   induction 1; auto; intros n Hn.
-  - apply IHclos_refl_trans_1n; eapply step_scoped; eauto.
+  - apply IHclos_refl_trans_1n; eauto.
 Qed.
 
-(*
-Require Import TypeChecking.
+Hint Resolve eval_scoped.
+
+Theorem lookup_scoped (Gamma : con) (Hg : scoped_con Gamma) :
+  forall i (Hi : i < length Gamma), scoped_at (length Gamma - S i) (lookup_lt Gamma (exist _ i Hi)).
+  Hint Rewrite <- minus_n_O.
+  induction Hg; try (inversion Hi; fail); intros.
+  - destruct i; simpl in *; [rewrite <- minus_n_O; auto|apply IHHg].
+Qed.
+
+(* can't believe this is necessary... *)
+Lemma scope_eq : forall n m, n = m -> forall e, scoped_at n e <-> scoped_at m e. induction 1; split; eauto. Qed.
 
 Theorem typed_implies_scoped : forall Gamma t T, scoped_con Gamma -> Gamma ⊢ t ∈ T -> scoped_at (length Gamma) T /\ scoped_at (length Gamma) t.
 Proof with try eassumption.
@@ -242,46 +248,25 @@ Proof with try eassumption.
   try (destruct (IHhas_type1 Hg) as [IH11 IH12]); try (destruct (IHhas_type2 Hg) as [IH21 IH22]);
   try (destruct (IHhas_type3 Hg) as [IH31 IH32]); try (destruct (IHhas_type4 Hg) as [IH41 IH42]);
   try (destruct (IHhas_type2 (scope_cons _ _ Hg IH12)) as [IH21 IH22]);
-  try (split; repeat constructor; auto; fail).
+  try (split; repeat constructor; auto; omega).
+  - split; [|constructor;omega]. unfold lookup_wk. simpl.
+    assert (H: ⟦ Gamma ⟧ = S i + (⟦ Gamma ⟧ - S i)) by omega.
+    extend wk_0_scoped; extend lookup_scoped; eapply scope_eq; eauto.
   (* app is weird *)
   - split; try (constructor; auto).
-    + inversion IH11; subst; apply subst_0_scoped...
-  - split; try (constructor; auto); (eapply unsubst_scoped_O; [|eassumption])...
+    + unfold lookup_wk; inversion IH11; subst; apply subst_0_scoped...
+  - inversion IH21; subst; split; constructor; auto.
   (* recursion principles will take special handling *)
-  - inversion IH21; subst. assert (Hg' : scoped_con (B :: A :: Gamma)) by auto. destruct (IHhas_type1 Hg') as [IH11 IH12].
-    assert (IHC : scoped_at (S(length Gamma)) C).
-      + apply unwk_scoped with (n := 2) (d := 1); [omega|eapply unsubst_scoped_O]; [|eassumption].
-        * constructor; [eapply scoped_at_lift; [eassumption|]; omega| |]; constructor; omega.
-      + split; [eapply subst_0_scoped; auto|constructor]...
-  (* oh, and so will sup *)
-  - destruct (IHhas_type2 (scope_cons _ _ Hg IH11)) as [IH21 IH22].
-    assert (Hg'' : scoped_con (subst_deep a 0 B :: Gamma)).
-      constructor; [|apply subst_0_scoped]...
-    destruct (IHhas_type3 Hg''); split; auto.
-  (* now for the /really/ fun one, wrec *)
-  - inversion IH21; subst.
-    assert (Hg' : scoped_con (wk_at 1 B :: pi B (wk_deep 2 0 (wt A B)) :: A :: Gamma)).
-      constructor; [constructor ;[constructor|]|];
-      [| |simpl; constructor; try assumption;
-          replace (S (S (length Gamma))) with (2 + length Gamma) by omega;
-          apply wk_scoped; constructor
-       | simpl; replace (S (S (length Gamma))) with (1 + S(length Gamma)) by omega; apply wk_scoped]...
-    destruct (IHhas_type1 Hg') as [IH11 IH12].
-    assert (Hc : scoped_at (S (length Gamma)) C). 
-      apply unsubst_scoped_O in IH11; [|constructor;constructor;omega].
-      apply unwk_scoped with (n := 3) (d := 1); [omega|]...
-    split; [apply subst_0_scoped|constructor]...
-  - assert (Hc : scoped_at (S (length Gamma)) C).
-      eapply unsubst_scoped_O; [|eassumption]; auto.
-    split; [apply subst_0_scoped|constructor]...
-  - assert (Hc : scoped_at (S (length Gamma)) C).
-      eapply unsubst_scoped_O; [|eassumption]; auto.
-    split; [apply subst_0_scoped|constructor]...
-  - destruct (IHhas_type1 (scope_cons _ _ Hg (scope_bot _))) as [IH11 IH12].
-    split; [apply subst_0_scoped|constructor]...
-Qed. (* seems like it ought to be possible to automate more of that, but for now I'll just leave it be *)
+  - inversion IH21; subst. inversion IH11; subst. inversion H6; subst. inversion H8; subst.
+    split; constructor; auto; apply unwk_scoped with (n := 2) (d := 0); auto; omega.
+  - inversion IH11; subst. inversion H4; subst. inversion H6; subst. inversion H8; subst.
+    split; constructor; auto; eapply unwk_scoped with (n := 3) (d := 0); eauto; omega.
+  - inversion IH11; subst; split; constructor; auto.
+  - inversion IH11; subst; split; constructor; auto.
+  - split; auto. eapply step_scoped; eauto.
+  - split; auto. (* Ack! this is no longer true *)
+Admitted.
 
 Theorem wf_implies_scoped : forall Gamma, wf_con Gamma -> scoped_con Gamma.
   induction 1; constructor; try eapply typed_implies_scoped; eassumption. Qed.
 
-Lemma typ_uq Gamma e T1 T2 : Gamma ⊢ e ∈ T1 -> Gamma ⊢ e ∈ T2 -> T1 = T2. *)

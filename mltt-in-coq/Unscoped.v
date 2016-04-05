@@ -1,4 +1,4 @@
-Require Export Arith Tactics.
+Require Export Prelude.
 
 Inductive exp : Set :=
 | var : forall(ix : nat), exp
@@ -32,10 +32,13 @@ Inductive exp : Set :=
 | exf : forall(C f : exp), exp.
 
 Definition exp_size (e : exp) : nat.
-  induction e;
+  induction e; [exact 1|exact 1| | | | | | | | | | | | | | | | | |];
   repeat match goal with
-           | [IH : nat |- _] => apply (fun x => x + IH); clear IH
-         end; apply 0. Defined.
+            [IH : nat |- _] => apply (fun x => x + IH); clear IH
+         end; apply 1. Defined.
+
+Print exp_size.
+Extraction exp_size.
  (* I think this definition is pretty cool :) *)
 
 Notation "a # b" := (smk _ a b) (at level 20, right associativity).
@@ -48,13 +51,13 @@ Definition and_sumor A1 A2 P1 P2 : A1 + {P1} -> A2 + {P2} -> (A1 * A2) + {P1 \/ 
 Arguments and_sumor {A1} {A2} {P1} {P2} s1 s2.
 Infix "&&t" := and_sumor (at level 500, left associativity).
 
-Definition prop_and {A B C D} : {A} + {B} -> {C} + {D} -> {A /\ C} + {B \/ D}. repeat (destruct 1; auto). Defined.
+Definition prop_and {A B C D} : {A} + {B} -> {C} + {D} -> {A /\ C} + {B \/ D}. 
+  repeat (destruct 1; auto). Defined.
 Infix "&&" := prop_and.
 
 Local Hint Extern 1 => subst; (reflexivity || congruence).
 
-Ltac destr_logic := repeat match goal with [H: _ /\ _ |- _] => destruct H | [H: _ \/ _ |- _] => destruct H | [H: exists x, _ |- _] => destruct H end.
-
+(* would use "decide equality" but that has worse computational properties *)
 Definition exp_eq_dec (e1 e2 : exp) : {e1 = e2} + {e1 <> e2}.
   generalize dependent e2; induction e1; destruct e2;
   (* off-diagonal cases *)
@@ -66,10 +69,12 @@ Definition exp_eq_dec (e1 e2 : exp) : {e1 = e2} + {e1 <> e2}.
   Inster_all;
   (* everything else *)
   repeat match goal with [H1: {_} + {_} , H2: {_} + {_} |- _] => remember (prop_and H1 H2) as H12; clear HeqH12; clear H1; clear H2 end;
-  destr_sums; destr_logic; 
+  destr_hyps;
   try (left; repeat match goal with [H: _ = _ |- _] => rewrite H; clear H end; reflexivity);
   try (right; injection 1; intuition).
 Defined.
+
+Infix "==" := (exp_eq_dec) (at level 50).
 
 (* weakening and substitution have the same recursion structure - lets only write it once *)
 Fixpoint vars_op (op : forall(d ix : nat), exp) (d : nat) (e : exp) : exp :=
@@ -98,8 +103,6 @@ Fixpoint vars_op (op : forall(d ix : nat), exp) (d : nat) (e : exp) : exp :=
 Definition wk_var (n d ix : nat) : exp := if le_dec d ix then var (n + ix) else var ix.
 Definition wk_deep (n : nat) : nat -> exp -> exp := vars_op (wk_var n).
 
-Hint Unfold vars_op wk_var wk_deep.
-
 Definition subst_var (v : exp) (d i : nat) : exp := match lt_eq_lt_dec i d with
                                                     | inleft (left _) => var i
                                                     | inleft (right _) => wk_deep d 0 v
@@ -108,11 +111,8 @@ Definition subst_var (v : exp) (d i : nat) : exp := match lt_eq_lt_dec i d with
 
 Definition subst_deep (v : exp) : nat -> exp -> exp := vars_op (subst_var v).
 
-Transparent vars_op.
-Transparent subst_deep.
-Transparent subst_var.
+Hint Unfold wk_deep subst_deep.
 Notation "x |> v // d" := (subst_deep v d x) (left associativity, at level 40).
-Hint Unfold subst_deep subst_var.
 
 Lemma wk_var_fold : forall n, (fun d ix => if le_dec d ix then &(n + ix) else &ix) = wk_var n. reflexivity. Qed.
 Lemma subst_var_fold : forall v, (fun d i => match lt_eq_lt_dec i d with

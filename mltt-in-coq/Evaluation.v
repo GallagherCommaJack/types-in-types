@@ -91,12 +91,6 @@ Lemma step_par : forall e1 e2, e1 ==> e2 -> e1 ~> e2.
 
 Hint Resolve step_par.
 
-Ltac destr_sumors := match goal with [H: _ + {_} |- _] => destruct H end.
-Ltac destr_exists := match goal with [H: exists _,_ |- _] => destruct H | [H: {_ | _} |- _] => destruct H end.
-
-Require Import Relation_Definitions.
-Require Import Relation_Operators.
-
 (* typing will depend on evaluation, so preservation will have to wait until we've proved Church-Rosser *)
 
 Lemma wk_par_cong : forall e1 e2 n d, e1 ~> e2 -> wk_deep n d e1 ~> wk_deep n d e2.
@@ -193,7 +187,6 @@ Proof with eauto.
 Qed.
 
 Infix "~~>" := (clos_trans exp par_red) (at level 50).
-Hint Constructors clos_trans.
 
 Hint Resolve par_diamond.
 
@@ -210,10 +203,6 @@ Lemma par_confluent : forall e1 e2 e3, e1 ~~> e2 -> e1 ~~> e3 -> exists e4, e2 ~
  Qed.
 
 Infix "===>" := (clos_refl_trans_1n exp step) (at level 50).
-Hint Constructors clos_refl_trans_1n.
-
-Lemma rtc_rtc : forall A R e1 e2 e3, clos_refl_trans_1n A R e1 e2 -> clos_refl_trans_1n A R e2 e3 -> clos_refl_trans_1n A R e1 e3.
-  induction 1; eauto. Qed.
 
 Lemma pi_rtc_cong : forall e1 e1', e1 ===> e1' -> forall e2 e2', e2 ===> e2' -> pi e1 e2 ===> pi e1' e2'.
   repeat induction 1; intros; eauto; eapply rtc_rtc; eauto. Qed.
@@ -431,6 +420,17 @@ Inductive nf : exp -> Prop :=
 | nf_unit : nf unit
 | nf_exf : forall B f, nf B -> nf f -> nf (exf B f).
 
-Lemma nf_normal : forall e, nf e -> is_normal e.
-  unfold is_normal; induction 1; inversion 1; subst; try_hyps; contradiction. Qed.
+Hint Constructors nf.
 
+Lemma nf_normal : forall e, nf e -> is_normal e.
+  unfold is_normal; induction 1; inversion 1; subst; try_hyps; invert_atom_steps; contradiction. Qed.
+
+
+Hint Resolve nf_normal.
+
+Theorem nf_uq : forall e1 e2 e3, e1 ===> e2 -> e1 ===> e3 -> nf e2 -> nf e3 -> e2 = e3.
+  intros; apply normal_forms_unique with (e1 := e1); auto. Qed.
+
+Hint Resolve nf_uq.
+Hint Rewrite nf_uq using repeat (assumption || constructor).
+Hint Rewrite normal_forms_unique using assumption.

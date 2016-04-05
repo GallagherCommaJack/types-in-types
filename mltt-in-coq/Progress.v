@@ -47,6 +47,7 @@ Definition in_concat A x xss : @In A x (concat xss) <-> exists xs, In xs xss /\ 
 Qed.
 
 Hint Resolve in_eq.
+Hint Rewrite in_concat concat_unit map_map map_app.
 
 Theorem progress_exhaustive : forall e1 e2, e1 ==> e2 -> In e2 (progress e1).
   induction 1; intros; simpl; try (simpl in *; auto; fail); 
@@ -60,9 +61,37 @@ Theorem progress_exhaustive : forall e1 e2, e1 ==> e2 -> In e2 (progress e1).
   try (repeat (apply in_or_app; right); auto; fail).
 Qed. 
 
+Hint Resolve in_map_iff.
+Hint Rewrite in_map_iff in_app_iff.
+
+Hint Extern 1 => match goal with [H: In _ [] |- _] => inversion H end.
+
+Lemma and_or_split (A B C : Prop) : (A \/ B -> C) <-> ((A -> C) /\ (B -> C)). intuition. Qed.
+Hint Rewrite and_or_split.
+
+Ltac destr_ins := repeat match goal with [H: In _ (_ ++ _)|-_] => apply in_app_or in H; destruct H end.
 Theorem progress_faithful : forall e1 e2, In e2 (progress e1) -> e1 ==> e2.
-  induction e1; intros.
-Admitted.
+  induction e1; intros e2 He2; try (inversion He2; subst); simpl in *; repeat rewrite concat_unit in He2;
+  repeat (autorewrite with core in *; destr_logic); subst; eauto.
+  - destruct e1_1; inversion H; subst; eauto.
+  - destruct e1_3; inversion H; subst; eauto.
+  - destruct e1_3; inversion H; subst; eauto.
+  - destruct e1_4; inversion H; subst; eauto.
+  - destruct e1_3; inversion H; subst; eauto.
+Qed.
+
+Hint Resolve progress_exhaustive progress_faithful.
+
+Lemma progress_reflect : forall e1 e2, In e2 (progress e1) <-> e1 ==> e2. split; auto. Qed.
+
+Hint Rewrite progress_reflect.
+
+Definition kleisli {M} `{Monad M} {A B C} (f : A -> M B) (g : B -> M C) : A -> M C := join ∘ fmap g ∘ f.
+
+Infix ">=>" := kleisli (at level 40, left associativity).
+
+Definition multi_progress : nat -> exp -> list exp := nat_rect _ (fun e => [e]) (fun n f' => f' >=> progress).
+Hint Unfold multi_progress.
 
 Reserved Notation "e1 =[ n ]=> e2" (at level 50).
 Inductive n_steps e1 : nat -> exp -> Prop :=
@@ -75,3 +104,8 @@ Lemma n_step e1 e2 e3 n : e1 =[n]=> e2 -> e2 ==> e3 -> e1 =[S n]=> e3.
   induction 1; eauto. Qed.
 
 Hint Resolve n_step.
+
+Theorem n_steps_iff_progress_n : forall e1 e2 n, e1 =[ n ]=> e2 <-> In e2 (multi_progress n e1).
+  intros; split. 
+  - induction 1; subst; simpl; eauto.
+    
