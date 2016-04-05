@@ -1,9 +1,17 @@
 Ltac destr_sums :=
-  repeat match goal with
-           | [ H :  _  + {_} |- _ ] => destruct H
-           | [ H :  _  +  _  |- _ ] => destruct H
-           | [ H : {_} + {_} |- _ ] => destruct H
-         end.
+  match goal with
+    | [ H :  _  + {_} |- _ ] => destruct H
+    | [ H :  _  +  _  |- _ ] => destruct H
+    | [ H : {_} + {_} |- _ ] => destruct H
+  end.
+
+Ltac destr_ors := match goal with [H: _\/_|-_] => destruct H end.
+Ltac destr_ands := match goal with [H: _/\_|-_] => destruct H end.
+Ltac destr_prods := match goal with [H: {_|_}|-_] => destruct H | [H: _*_|-_] => destruct H end.
+Ltac destr_exists := match goal with [H: exists _,_ |- _] => destruct H end.
+Ltac destr_logic := repeat (destr_exists || destr_ands || destr_ors).
+Ltac destr_safe := repeat (destr_prods || destr_sums).
+Ltac destr_hyps := destr_safe; destr_logic.
 
 Ltac Inster_all := repeat
   match goal with
@@ -22,13 +30,13 @@ Ltac destr_goal_if :=
 Ltac destr_goal_sum :=
   match goal with
     | [|- context[?s]] => match type of s with
-                          | {_} + {_} => destruct s
-                          | _ + {_} => destruct s
-                        end
+                            | _ + _ => destruct s
+                            | {_} + {_} => destruct s
+                            | _ + {_} => destruct s
+                          end
   end.
 
 Tactic Notation "destr_choices" := repeat (destr_goal_if || destr_goal_sum; simpl).
-
 
 Ltac notHyp P :=
   match goal with
@@ -46,11 +54,11 @@ Ltac extend pf :=
 
 Ltac try_hyps := 
   repeat match goal with
-           | [H: forall (e : ?T), _ , e : ?T |- _] => extend (H e)
+           | [IH: forall e, ?P e -> _ , H: ?P _ |- _] => extend (IH H) || extend (IH _ H)
            | [IH: ?P -> _ , H: ?P |- _] => extend (IH H) 
-           | [IH: forall e, ?P e -> _ , H: ?P ?e |- _] => extend (IH e H)
            | [IH: ?P <-> ?Q, H: ?P |- _] => extend (proj1 IH H)
            | [IH: ?P <-> ?Q, H: ?Q |- _] => extend (proj2 IH H)
+           | [H: forall (e : ?T), _ , e : ?T |- _] => extend (H e)
          end.
 
 Ltac clear_funs :=
