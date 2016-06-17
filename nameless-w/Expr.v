@@ -1,26 +1,12 @@
 Set Implicit Arguments.
 Require Import Prelude.
-Require Import Autosubst.Autosubst.
+Require Export Autosubst.Autosubst.
 
 Variable (name : eqType).
 
-Inductive Univ : Type := prop | set | typ.
-
-Fixpoint Univ_beq (u1 u2 : Univ) : bool :=
-  match u1,u2 with
-      prop,prop|set,set|typ,typ => true
-    | _,_ => false
-  end.
-
-Lemma univ_eqnP : Equality.axiom Univ_beq.
-Proof. move=>x y; apply (iffP idP); unfold is_true; destruct x,y; simpl; intro; congruence. Qed.
-
-Canonical univ_eqMixin := EqMixin univ_eqnP.
-Canonical univ_eqType := EqType Univ univ_eqMixin.
-
 Inductive exp : Type :=
   Bind : var -> exp
-| Sort : Univ -> exp
+| Sort : nat -> exp
 | Free : name -> exp
 
 | Pi : exp -> {bind exp} -> exp
