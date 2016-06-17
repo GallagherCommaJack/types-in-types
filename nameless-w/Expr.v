@@ -72,3 +72,31 @@ Canonical exp_eqMixin := EqMixin exp_eqnP.
 Canonical exp_eqType := EqType exp exp_eqMixin.
 
 Notation wk n := (ren (+ n)).
+
+Section desc_exps.
+  Variable (s : nat).
+  Fixpoint All (d : desc) (P : {bind exp}) (e : exp) :=
+    match d with 
+        d_One => Unit
+      | d_Ind => P.[e/]
+      | d_Sum d1 d2 => Split
+                        (Sort s)
+                        (All d1 P.[up (wk 1)] (Bind 0))
+                        (All d2 P.[up (wk 1)] (Bind 0))
+                        e
+      | d_Prd d1 d2 => Prd (All d1 P (S_p1 e)) (All d2 P (S_p2 e))
+    end.
+
+  Variables (P r : {bind exp}).
+  Fixpoint rall (d : desc) (e : exp) :=
+    match d with
+        d_One => unit
+      | d_Ind => r.[e/]
+      | d_Sum d1 d2 => Split
+                        (All (d_Sum d1 d2) P (Bind 0)) 
+                        (rall d1 (Bind 0))
+                        (rall d2 (Bind 0))
+                        e
+      | d_Prd d1 d2 => S_mk (rall d1 (S_p1 e)) (rall d2 (S_p2 e))
+    end.
+End desc_exps.
