@@ -33,7 +33,7 @@ Inductive has_type (Gamma : list exp) : exp ->  exp -> Prop :=
   T_bind : forall i, i < length Gamma -> [Gamma |+ Bind i :< dget Gamma i]
 | T_free : forall nm t, const_tys nm = Some t -> [Gamma |+ Free nm :< t]
 | T_sort : forall s, [Gamma |+ Sort s :< Sort s.+1]
-| T_cumu : forall i j, [Gamma |+ i :< Sort j] -> [Gamma |+ i :< Sort j.+1]
+(* | T_cumu : forall i j, [Gamma |+ i :< Sort j] -> [Gamma |+ i :< Sort j.+1] *)
 (* | T_set : [Gamma |+ Sort set :< Sort typ] *)
 | T_pi : forall A B u1 u2, [Gamma |+ A :< Sort u1] -> [(A :: Gamma) |+ B :< Sort u2] -> [Gamma |+ (A :>> B) :< Sort (imax u1 u2)]
 | T_lam : forall A B b, [(A :: Gamma) |+ b :< B] -> [Gamma |+ (A :#> b) :< (A :>> B)]
