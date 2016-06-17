@@ -21,7 +21,7 @@ Inductive exp : Type :=
 | Sum : exp -> exp -> exp
 | Sum_inl : exp -> exp
 | Sum_inr : exp -> exp
-| Split : {bind exp} -> {bind exp} -> {bind exp} -> exp
+| Split : {bind exp} -> {bind exp} -> {bind exp} -> exp -> exp
 
 | Unit : exp
 | unit : exp
@@ -32,7 +32,7 @@ Inductive exp : Type :=
 | Mu : desc -> exp
 | Wrap : exp -> exp
 | Unwrap : exp -> exp
-| mu : desc -> exp -> exp -> exp -> exp.
+| mu : desc -> {bind exp} -> exp -> exp -> exp.
 
 Infix ":>>" := Pi (at level 20).
 Infix ":#>" := Lam (at level 30).
