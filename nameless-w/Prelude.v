@@ -33,7 +33,7 @@ Lemma lookup_iff_ge A : forall Gamma i, ⟦Gamma⟧ <= i <-> @lookup_con A Gamma
 Qed.
 
 Hint Rewrite lookup_iff_ge.
-Hint Rewrite ltnNge.
+(* Hint Rewrite ltnNge. *)
 Hint Unfold is_true.
 Hint Rewrite Bool.negb_involutive Bool.negb_true_iff.
 Hint Extern 1 => match goal with [H1 : ?p = true, H2 : ?p = false |- _] => exfalso; congruence end.
@@ -43,10 +43,10 @@ Proof.
   split.
   - remember (lookup_con Gamma i) as lgi; destruct lgi; [eauto|].
     assert (⟦Gamma⟧ <= i) by (apply lookup_iff_ge; auto).
-    autounfold in *; autorewrite with core in *; auto.
+    autounfold in *; rewrite ltnNge; autorewrite with core in *; auto.
   - move=>[a H]; remember (⟦ Gamma ⟧ <= i) as lgi; destruct lgi;
          [assert (⟦Gamma⟧ <= i) by auto|autounfold];
-         autorewrite with core in *; [congruence|auto].
+         rewrite ltnNge; autorewrite with core in *; [congruence|auto].
 Qed.
 
 Require Export Fin.
@@ -96,6 +96,8 @@ Proof. induction 1; eauto. Qed.
 Inductive W (A : Type) (B : A -> Type) : Type :=
   sup : forall a, (B a -> W B) -> W B.
 
+Set Boolean Equality Schemes.
+Set Decidable Equality Schemes.
 Inductive desc : Type := 
   d_One | d_Ind
 | d_Sum of desc of desc
@@ -115,16 +117,11 @@ Proof.  decide equality. Defined.
 
 (* This is hilarious *)
 
-Definition desc_eq (e1 e2 : desc) : bool. destruct (desc_dec_eq e1 e2); [exact true|exact false]. Defined.
-
 Hint Resolve andb_true_intro.
-Lemma desc_eqnP : Equality.axiom desc_eq.
-Proof.
-  move=>x y. apply (iffP idP).
-  { remember (desc_eq x y). unfold desc_eq in Heqb.
-    destruct desc_dec_eq; unfold is_true; intros; congruence. }
-  { unfold desc_eq. destruct match; intros; congruence. }
-Qed.
+Hint Resolve internal_desc_dec_bl internal_desc_dec_lb.
+
+Lemma desc_eqnP : Equality.axiom desc_beq.
+Proof. move=>x y. apply (iffP idP); auto. Qed.
 
 Canonical desc_eqMixin := EqMixin desc_eqnP.
 Canonical desc_eqType := EqType desc desc_eqMixin.
