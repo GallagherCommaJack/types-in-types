@@ -95,3 +95,8 @@ Tactic Notation "solve" "by" "inversion" "3" :=
   solve_by_inversion_step (solve by inversion 2).
 Tactic Notation "solve" "by" "inversion" :=
   solve by inversion 1.
+
+Tactic Notation "inverts" ident(H) := inversion H; clear H; subst.
+
+Tactic Notation "rewrite" "assumption" ident(H) := rewrite H; try assumption.
+Tactic Notation "rewrite" "asms" := repeat match goal with [H:_|-_] => rewrite assumption H end.

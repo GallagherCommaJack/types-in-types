@@ -2,7 +2,10 @@ Set Implicit Arguments.
 Require Import Prelude.
 Require Export Autosubst.Autosubst.
 
-Variable (name : eqType).
+Set Boolean Equality Schemes.
+Scheme Equality for nat.
+
+Definition name := nat.
 
 Inductive exp : Type :=
   Bind : var -> exp
@@ -10,7 +13,8 @@ Inductive exp : Type :=
 | Free : name -> exp
 
 | Pi : exp -> {bind exp} -> exp
-| Lam : exp -> {bind exp} -> exp
+(* | Lam : exp -> {bind exp} -> exp *)
+| Lam : {bind exp} -> exp
 | App  : exp -> exp -> exp
 
 | Sigma : exp -> {bind exp} -> exp
@@ -21,18 +25,35 @@ Inductive exp : Type :=
 | Sum : exp -> exp -> exp
 | Sum_inl : exp -> exp
 | Sum_inr : exp -> exp
-| Split : {bind exp} -> {bind exp} -> {bind exp} -> exp -> exp
+| Split : {bind exp} -> {bind exp} -> exp -> exp
 
 | Unit : exp
 | unit : exp
 
-| Empty :  exp
-| empty_rec : {bind exp} -> exp -> exp
+(* | Empty :  exp *)
+(* | empty_rec : exp -> exp *)
 
 | Mu : desc -> exp
-| Wrap : exp -> exp
-| Unwrap : exp -> exp
-| mu : desc -> {bind exp} -> exp -> exp -> exp.
+(* | Wrap : exp -> exp *)
+(* | Unwrap : exp -> exp *)
+| mu : desc -> exp -> exp -> exp.
+
+Hint Resolve internal_nat_dec_lb internal_nat_dec_bl.
+
+Lemma exp_dec_lb : forall x y, x = y -> exp_beq x y. destruct 1; induction x; simpl; f_equal; rewrite asms; auto. Qed.
+Hint Resolve exp_dec_lb.
+
+Hint Extern 1 => match goal with [H: (_ && _)        |- _] => apply andb_prop in H; destruct H end.
+Hint Extern 1 => match goal with [H: (_ && _) = true |- _] => apply andb_prop in H; destruct H end.
+Lemma exp_dec_bl : forall x y, exp_beq x y -> x = y. unfold is_true; induction x; destruct y; 
+                                               simpl; intros; f_equal; congruence || auto. Qed.
+Hint Resolve exp_dec_bl.  
+
+Lemma exp_eqnP : Equality.axiom exp_beq.
+Proof. intros x y; apply (iffP idP); auto. Qed.
+
+Canonical exp_eqMixin := EqMixin exp_eqnP.
+Canonical exp_eqType := EqType exp exp_eqMixin.
 
 Infix ":>>" := Pi (at level 20).
 Infix ":#>" := Lam (at level 30).
@@ -55,48 +76,27 @@ Fixpoint D_efunc (D : desc) (X : exp) : exp :=
     | d_Ind => X
   end.
 
-Definition exp_dec_eq (e1 e2 : exp) : {e1 = e2} + {e1 <> e2}.
-Proof.
-  decide equality; match goal with [|-{?i1 = ?i2} + {_ <> _}] => destruct (i1 =P i2); [left|right] end; assumption.
-Defined.
-
-(* This is hilarious *)
-Notation exp_eq := (fun e1 e2 => if exp_dec_eq e1 e2 then true else false).
-(* destruct (exp_dec_eq e1 e2); [exact true|exact false]. Defined. *)
-
-Hint Resolve andb_true_intro.
-Lemma exp_eqnP : Equality.axiom exp_eq.
-Proof. move=>x y. apply (iffP idP); destruct (exp_dec_eq x y); simpl; intro; congruence. Qed.
-
-Canonical exp_eqMixin := EqMixin exp_eqnP.
-Canonical exp_eqType := EqType exp exp_eqMixin.
-
 Notation wk n := (ren (+ n)).
 
-Section desc_exps.
-  Variable (s : nat).
-  Fixpoint All (d : desc) (P : {bind exp}) (e : exp) :=
-    match d with 
-        d_One => Unit
-      | d_Ind => P.[e/]
-      | d_Sum d1 d2 => Split
-                        (Sort s)
-                        (All d1 P.[up (wk 1)] (Bind 0))
-                        (All d2 P.[up (wk 1)] (Bind 0))
-                        e
-      | d_Prd d1 d2 => Prd (All d1 P (S_p1 e)) (All d2 P (S_p2 e))
-    end.
+Fixpoint All (d : desc) (P : {bind exp}) (e : exp) :=
+  match d with 
+      d_One => Unit
+    | d_Ind => P.[e/]
+    | d_Sum d1 d2 => Split
+                      (All d1 P.[up (wk 1)] (Bind 0))
+                      (All d2 P.[up (wk 1)] (Bind 0))
+                      e
+    | d_Prd d1 d2 => Prd (All d1 P (S_p1 e)) (All d2 P (S_p2 e))
+  end.
 
-  Variables (P r : {bind exp}).
-  Fixpoint rall (d : desc) (e : exp) :=
-    match d with
-        d_One => unit
-      | d_Ind => r.[e/]
-      | d_Sum d1 d2 => Split
-                        (All (d_Sum d1 d2) P (Bind 0)) 
-                        (rall d1 (Bind 0))
-                        (rall d2 (Bind 0))
-                        e
-      | d_Prd d1 d2 => S_mk (rall d1 (S_p1 e)) (rall d2 (S_p2 e))
-    end.
-End desc_exps.
+Fixpoint rall (d : desc) (r : {bind exp}) (e : exp) :=
+  match d with
+      d_One => unit
+    | d_Ind => r.[e/]
+    | d_Sum d1 d2 => Split
+                      (* (All (d_Sum d1 d2) P (Bind 0))  *)
+                      (rall d1 r.[up (wk 1)] (Bind 0))
+                      (rall d2 r.[up (wk 1)] (Bind 0))
+                      e
+    | d_Prd d1 d2 => S_mk (rall d1 r (S_p1 e)) (rall d2 r (S_p2 e))
+  end.
