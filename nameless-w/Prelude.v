@@ -4,8 +4,8 @@ Require Export MonadLib.
 Require Export mathcomp.ssreflect.all_ssreflect.
 (* notations *)
 
-Open Scope list_scope.
-Notation "⟦ xs ⟧" := (length xs).
+Open Scope seq_scope.
+Notation "⟦ xs ⟧" := (size xs).
 Notation "<< x , y >>" := (exist _ x y).
 
 (* Program things *)
@@ -16,7 +16,7 @@ Obligation Tactic := program_simpl; try (simpl in *; auto; solve by inversion).
 
 Set Implicit Arguments.
 
-Fixpoint lookup_con {A} (Gamma: list A) (i : nat) : option A :=
+Fixpoint lookup_con {A} (Gamma: seq A) (i : nat) : option A :=
   match Gamma , i with
     | nil , _ => None
     | (X :: Gamma) , 0 => Some X
@@ -28,7 +28,7 @@ Fixpoint lookup_con {A} (Gamma: list A) (i : nat) : option A :=
 
 Lemma lookup_iff_ge A : forall Gamma i, ⟦Gamma⟧ <= i <-> @lookup_con A Gamma i = None.
   induction Gamma; destruct i; simpl; split; intros; auto; try solve by inversion.
-  - specialize (IHGamma i). assert(H': length Gamma <= i) by auto. apply IHGamma in H'. rewrite H'. auto.
+  - specialize (IHGamma i). assert(H': size Gamma <= i) by auto. apply IHGamma in H'. rewrite H'. auto.
   - specialize (IHGamma i). destruct (lookup_con Gamma i); [inversion H|apply IHGamma in H]; auto.
 Qed.
 
@@ -51,14 +51,14 @@ Qed.
 
 Require Export Fin.
 
-Program Fixpoint lookup_lt {A} (Gamma : list A) (i : fin ⟦Gamma⟧) : A :=
+Program Fixpoint lookup_lt {A} (Gamma : seq A) (i : fin ⟦Gamma⟧) : A :=
   match Gamma , i with
     | nil , _ => False_rect _ _
     | (x :: xs) , 0   => x
     | (x :: xs) , S n => lookup_lt xs n
   end.
 
-Lemma lookup_irrel A (Gamma : list A) : forall i j, `i = `j -> lookup_lt Gamma i = lookup_lt Gamma j.
+Lemma lookup_irrel A (Gamma : seq A) : forall i j, `i = `j -> lookup_lt Gamma i = lookup_lt Gamma j.
 Proof.
   induction Gamma; move=>[i Hi]; destruct j; simpl in *; destruct 1;
   [exfalso; auto|destruct i]; eauto.
@@ -79,7 +79,7 @@ Hint Extern 1 False => apply Bool.diff_true_false.
 
 Local Hint Unfold lt.
 Tactic Notation "destruct" "match" := match goal with [|-context[match ?e with _ => _ end]] => destruct e end.
-Lemma lookup_lt_con A (Gamma : list A) : forall (i : fin ⟦Gamma⟧), lookup_con Gamma (`i) = Some (lookup_lt Gamma i).
+Lemma lookup_lt_con A (Gamma : seq A) : forall (i : fin ⟦Gamma⟧), lookup_con Gamma (`i) = Some (lookup_lt Gamma i).
 Proof.
   induction Gamma; destruct i as [i Hi]; simpl in *; [exfalso;auto|destruct i];
   reflexivity || rewrite <- IHGamma; simpl in *; destruct match; auto.
@@ -111,7 +111,7 @@ Fixpoint desc_func (D : desc) (X : Type) : Type :=
     | d_Prd A B => desc_func A X * desc_func B X
   end.
 
-Example List (D : desc) : desc := d_Sum d_One (d_Prd D d_Ind).
+Example Seq (D : desc) : desc := d_Sum d_One (d_Prd D d_Ind).
 Definition desc_dec_eq (e1 e2 : desc) : {e1 = e2} + {e1 <> e2}.
 Proof.  decide equality. Defined.
 

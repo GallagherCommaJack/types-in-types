@@ -30,7 +30,8 @@ Variable const_vals : env exp.
 
 Inductive par_step : relation exp :=
 | P_ref    : forall e, e ::> e
-                    
+(* | P_free   : forall nm e, const_vals nm = Some e -> Free nm ::> e                     *)
+
 | P_pi     : forall A A' B B', A ::> A' -> B ::> B' -> A :>> B ::> A' :>> B'
 (* | P_lam    : forall A A' b b', A ::> A' -> b ::> b' -> A :#> b ::> A' :#> b' *)
 | P_lam    : forall b b', b ::> b' -> Lam b ::> Lam b'
@@ -75,6 +76,7 @@ Hypothesis consts_closed : forall nm e, const_vals nm = Some e -> closed e.
 
 Fixpoint rho (e : exp) : exp :=  
   match e with
+    (* | Free nm => match const_vals nm with None => Free nm | Some e => e end *)
     | (A :>> B) => (rho A) :>> (rho B)
     | (Lam b) => Lam (rho b)
     | (f :$: a) => match rho f with
@@ -232,3 +234,223 @@ Tactic Notation "clear" "trivial" :=
            | [H: ?a = ?a |- _] => clear H
            | [H: ?a == ?a |- _] => clear H 
          end.
+
+Notation conv := (clos_refl_sym_trans _ par_step).
+Notation red := (clos_trans _ par_step).
+Infix "<:::>" := conv (at level 50).
+Infix ":::>" := red (at level 50).
+
+Hint Resolve t_step rst_step rst_refl.
+Hint Resolve t_trans rst_trans rst_sym : slow.
+
+Lemma red_Pi_l : forall A B A', A :::> A' -> Pi A B :::> Pi A' B. induction 1; eauto with slow. Qed.
+Lemma red_Pi_r : forall A B B', B :::> B' -> Pi A B :::> Pi A B'. induction 1; eauto with slow. Qed.
+Hint Resolve red_Pi_l red_Pi_r.
+
+Lemma red_Pi_Pi A B A' B' : (A :::> A') -> (B :::> B') -> Pi A B :::> Pi A' B'. eauto with slow. Qed.
+Hint Resolve red_Pi_Pi.
+
+Lemma red_Sigma_l : forall A B A', A :::> A' -> Sigma A B :::> Sigma A' B. induction 1; eauto with slow. Qed.
+Lemma red_Sigma_r : forall A B B', B :::> B' -> Sigma A B :::> Sigma A B'. induction 1; eauto with slow. Qed.
+Hint Resolve red_Sigma_l red_Sigma_r.
+ 
+Lemma red_Sigma_Sigma A B A' B' : (A :::> A') -> (B :::> B') -> Sigma A B :::> Sigma A' B'. eauto with slow. Qed.
+Hint Resolve red_Sigma_Sigma.
+
+Lemma red_Sum_l : forall A B A', A :::> A' -> Sum A B :::> Sum A' B. induction 1; eauto with slow. Qed.
+Lemma red_Sum_r : forall A B B', B :::> B' -> Sum A B :::> Sum A B'. induction 1; eauto with slow. Qed.
+Hint Resolve red_Sum_l red_Sum_r.
+
+Lemma red_Sum_Sum A B A' B' : (A :::> A') -> (B :::> B') -> Sum A B :::> Sum A' B'. eauto with slow. Qed.
+Hint Resolve red_Sum_Sum.
+
+Lemma red_Lam_Lam : forall e e', e :::> e' -> Lam e :::> Lam e'. induction 1; eauto with slow. Qed.
+Hint Resolve red_Lam_Lam.
+
+Lemma red_S_p1_S_p1 : forall e e', e :::> e' -> S_p1 e :::> S_p1 e'. induction 1; eauto with slow. Qed.
+Lemma red_S_p2_S_p2 : forall e e', e :::> e' -> S_p2 e :::> S_p2 e'. induction 1; eauto with slow. Qed.
+Hint Resolve red_S_p1_S_p1 red_S_p2_S_p2.
+
+Lemma red_Sum_inl_Sum_inl : forall e e', e :::> e' -> Sum_inl e :::> Sum_inl e'. induction 1; eauto with slow. Qed.
+Lemma red_Sum_inr_Sum_inr : forall e e', e :::> e' -> Sum_inr e :::> Sum_inr e'. induction 1; eauto with slow. Qed.
+Hint Resolve red_Sum_inl_Sum_inl red_Sum_inr_Sum_inr.
+
+Lemma red_App_l : forall A B A', A :::> A' -> App A B :::> App A' B. induction 1; eauto with slow. Qed.
+Lemma red_App_r : forall A B B', B :::> B' -> App A B :::> App A B'. induction 1; eauto with slow. Qed.
+Hint Resolve red_App_l red_App_r.
+
+Lemma red_App_App A B A' B' : (A :::> A') -> (B :::> B') -> App A B :::> App A' B'. eauto with slow. Qed.
+Hint Resolve red_App_App.
+
+Lemma red_S_mk_l : forall A B A', A :::> A' -> S_mk A B :::> S_mk A' B. induction 1; eauto with slow. Qed.
+Lemma red_S_mk_r : forall A B B', B :::> B' -> S_mk A B :::> S_mk A B'. induction 1; eauto with slow. Qed.
+Hint Resolve red_S_mk_l red_S_mk_r.
+
+Lemma red_S_mk_S_mk a b a' b' : a :::> a' -> b :::> b' -> S_mk a b :::> S_mk a' b'. eauto with slow. Qed.
+Hint Resolve red_S_mk_S_mk.
+
+Lemma red_Split_1 a b c a' : (a :::> a') -> Split a b c :::> Split a' b c. induction 1; eauto with slow. Qed.
+Lemma red_Split_2 a b c b' : (b :::> b') -> Split a b c :::> Split a b' c. induction 1; eauto with slow. Qed.
+Lemma red_Split_3 a b c c' : (c :::> c') -> Split a b c :::> Split a b c'. induction 1; eauto with slow. Qed.
+Hint Resolve red_Split_1 red_Split_2 red_Split_3.
+
+Lemma red_Split_Split a b c a' b' c' : (a :::> a') -> (b :::> b') -> (c :::> c') -> Split a b c :::> Split a' b' c'.
+Proof. intros. apply t_trans with (y := Split a' b c); eauto with slow. Qed.
+Hint Resolve red_Split_Split.
+
+Lemma red_mu_l D : forall A B A', A :::> A' -> mu D A B :::> mu D A' B. induction 1; eauto with slow. Qed.
+Lemma red_mu_r D : forall A B B', B :::> B' -> mu D A B :::> mu D A B'. induction 1; eauto with slow. Qed.
+Hint Resolve red_mu_l red_mu_r.
+
+Lemma red_mu_mu D A B A' B' : (A :::> A') -> (B :::> B') -> mu D A B :::> mu D A' B'. eauto with slow. Qed.
+Hint Resolve red_mu_mu.
+
+Lemma red_Bind v e : Bind v :::> e <-> e = Bind v. 
+Proof. remember (Bind v).
+  split; induction 1; subst; auto; inversion H; subst; intuition; subst; reflexivity. 
+Qed.
+ 
+Lemma red_Sort l e : Sort l :::> e <-> e = Sort l.
+Proof. remember (Sort l).
+  split; induction 1; subst; auto; inversion H; subst; intuition; subst; reflexivity.
+Qed.
+
+Lemma red_Unit e : Unit :::> e <-> e = Unit.
+Proof. remember Unit.
+  split; induction 1; subst; auto; inversion H; subst; intuition; subst; reflexivity.
+Qed.
+
+Lemma red_unit e : unit :::> e <-> e = unit.
+Proof. remember unit.
+  split; induction 1; subst; auto; inversion H; subst; intuition; subst; reflexivity.
+Qed.
+
+Lemma red_Mu D e : Mu D :::> e <-> e = Mu D.
+Proof. remember (Mu D).
+  split; induction 1; subst; auto; inversion H; subst; intuition; subst; reflexivity.
+Qed.
+
+Lemma red_Pi A B e : Pi A B :::> e <-> exists A' B', (e = Pi A' B') /\ (A :::> A') /\ (B :::> B').
+Proof. split.
+  { remember (A :>> B) as ab. 
+    move=>Hab. move:A B Heqab.
+    induction Hab; intros; subst; auto.
+    { inversion H; subst; eauto 10. }
+    { specialize (IHHab1 A B); intuition; destr_logic; subst.
+      specialize (IHHab2 x x0); intuition; destr_logic; subst. eauto 10 with slow. } }
+  { intros; destr_logic; subst; auto. }
+Qed.
+
+Lemma red_Sigma A B e : Sigma A B :::> e <-> exists A' B', (e = Sigma A' B') /\ (A :::> A') /\ (B :::> B').
+Proof. split.
+  { remember (Sigma A B) as ab. 
+    move=>Hab. move:A B Heqab.
+    induction Hab; intros; subst; auto.
+    { inversion H; subst; eauto 10. }
+    { specialize (IHHab1 A B); intuition; destr_logic; subst.
+      specialize (IHHab2 x x0); intuition; destr_logic; subst. eauto 10 with slow. } }
+  { intros; destr_logic; subst; auto. }
+Qed.
+
+Lemma red_S_mk A B e : S_mk A B :::> e <-> exists A' B', (e = S_mk A' B') /\ (A :::> A') /\ (B :::> B').
+Proof. split.
+  { remember (S_mk A B) as ab. 
+    move=>Hab. move:A B Heqab.
+    induction Hab; intros; subst; auto.
+    { inversion H; subst; eauto 10. }
+    { specialize (IHHab1 A B); intuition; destr_logic; subst.
+      specialize (IHHab2 x x0); intuition; destr_logic; subst. eauto 10 with slow. } }
+  { intros; destr_logic; subst; auto. }
+Qed.
+
+Lemma red_Sum A B e : Sum A B :::> e <-> exists A' B', (e = Sum A' B') /\ (A :::> A') /\ (B :::> B').
+Proof. split.
+  { remember (Sum A B) as ab. 
+    move=>Hab. move:A B Heqab.
+    induction Hab; intros; subst; auto.
+    { inversion H; subst; eauto 10. }
+    { specialize (IHHab1 A B); intuition; destr_logic; subst.
+      specialize (IHHab2 x x0); intuition; destr_logic; subst. eauto 10 with slow. } }
+  { intros; destr_logic; subst; auto. }
+Qed.
+
+Lemma red_Lam b e : Lam b :::> e <-> exists b', (e = Lam b') /\ (b :::> b').
+Proof. split.
+  { remember (Lam b) as lb. move=>Hred; move: b Heqlb. induction Hred; intros; subst; eauto.
+    { inversion H; subst; eauto. }
+    { specialize (IHHred1 b); intuition; destr_logic; subst.
+      specialize (IHHred2 x); intuition; destr_logic; subst.
+      eauto. } }
+  { intros; destr_logic; subst; auto. }
+Qed.
+
+Lemma red_Sum_inl b e : Sum_inl b :::> e <-> exists b', (e = Sum_inl b') /\ (b :::> b').
+Proof. split.
+  { remember (Sum_inl b) as lb. move=>Hred; move: b Heqlb. induction Hred; intros; subst; eauto.
+    { inversion H; subst; eauto. }
+    { specialize (IHHred1 b); intuition; destr_logic; subst.
+      specialize (IHHred2 x); intuition; destr_logic; subst.
+      eauto. } }
+  { intros; destr_logic; subst; auto. }
+Qed.
+
+Lemma red_Sum_inr b e : Sum_inr b :::> e <-> exists b', (e = Sum_inr b') /\ (b :::> b').
+Proof. split.
+  { remember (Sum_inr b) as lb. move=>Hred; move: b Heqlb. induction Hred; intros; subst; eauto.
+    { inversion H; subst; eauto. }
+    { specialize (IHHred1 _ erefl); destr_logic; subst.
+      specialize (IHHred2 _ erefl); destr_logic; subst.
+      eauto. } }
+  { intros; destr_logic; subst; auto. }
+Qed.
+
+Lemma sred_cong1 : forall e e' sigma, e :::> e' -> e.[sigma] :::> e'.[sigma]. induction 1; eauto. Qed.
+Hint Resolve sred_cong1.
+
+Notation sred sigma tau := (forall i : var, sigma i :::> tau i).
+Infix ".>>>" := sred (at level 50).
+
+Lemma sred_ref : forall sigma, sigma .>>> sigma. intros; eauto. Qed.
+Lemma sub_sred : forall sigma tau, sigma .>>> tau -> forall e e', e :::> e' -> (e .: sigma) .>>> (e' .: tau). intros; destruct i; simpl; auto. Qed.
+
+Lemma up_sred : forall sigma tau, sigma .>>> tau -> up sigma .>>> up tau. intros; destruct i; asimpl; auto. Qed.
+Hint Resolve up_sred sub_sred sred_ref.
+
+Lemma sred_cong2 : forall e sigma tau, sigma .>>> tau -> e.[sigma] :::> e.[tau]. induction e; intros; simpl; auto. Qed.
+Hint Resolve sred_cong2.
+
+Lemma sred_cong : forall e e', e :::> e' -> forall sigma tau, sigma .>>> tau -> e.[sigma] :::> e'.[tau]. intros. apply t_trans with (y := e.[tau]); auto. Qed.
+Hint Resolve sred_cong.
+
+Lemma red_App f a e : (f :$: a) :::> e <-> (exists f' a', e = (f' :$: a') /\ (f :::> f') /\ (a :::> a')) \/
+                                             (exists b, (f :::> Lam b) /\ (b.[a/] :::> e)).
+Proof. split.
+  { remember (f :$: a) as fa.
+    move=>Hred; move: f a Heqfa; induction Hred; intros; subst.
+    { inverts H; try solve[left; eauto 7]. right; eauto 10. }
+    { specialize (IHHred1 _ _ erefl).
+      destr_logic; subst; [|right; eauto].
+      specialize (IHHred2 _ _ erefl).
+      destr_logic; subst; [left|right]; eauto 7. } }
+  { intros; destr_logic; subst; auto.
+    apply t_trans with (y := Lam x :$: a); auto.
+    apply t_trans with (y := x.[a/]); auto. }
+Qed.
+
+(* Not working for now - need to add P_free rule *)
+(* Lemma red_Free nm e : Free nm :::> e <-> (e = Free nm) \/ (exists e', const_vals nm = Some e' /\ e' :::> e). *)
+(* Proof. split. *)
+(*   { remember (Free nm) as f.  *)
+(*     induction 1; subst. *)
+(*     - inversion H; subst; eauto. *)
+(*     - specialize (IHclos_trans1 erefl); destr_logic; subst; eauto. } *)
+(*   { destruct 1; subst; destr_logic; eauto. *)
+(*     apply t_trans with (y := x); auto. } *)
+(* Qed. *)
+
+(* Lemma red_S_p1 : forall p e, S_p1 p :::> e <-> (exi) *)
+(* Lemma red_S_p1 : true. *)
+(* Lemma red_S_p2 : true. *)
+(* Lemma red_Split : true. *)
+(* Lemma red_mu : true. *)
+(* Lemma red_Free nm e : Free nm :::> e <-> (e = Free nm) \/ (exists e', const_vals nm = Some e' /\ e' <::> e). *)

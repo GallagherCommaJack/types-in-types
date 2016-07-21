@@ -55,9 +55,9 @@ Proof. intros x y; apply (iffP idP); auto. Qed.
 Canonical exp_eqMixin := EqMixin exp_eqnP.
 Canonical exp_eqType := EqType exp exp_eqMixin.
 
-Infix ":>>" := Pi (at level 20).
-Infix ":#>" := Lam (at level 30).
-Infix ":$:" := App (at level 50).
+Infix ":>>" := Pi (at level 20, right associativity).
+Infix ":#>" := Lam (at level 30, right associativity).
+Infix ":$:" := App (at level 50, left associativity).
 Notation "<< a ;; b >>" := (S_mk a b).
 
 Instance Ids_exp : Ids exp. derive. Defined.
