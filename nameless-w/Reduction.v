@@ -503,6 +503,38 @@ Qed.
 
 Hint Rewrite red_App red_S_p1 red_S_p2 red_Split red_mu : beta.
 
+Lemma red_conv : forall e e', e :::> e' -> e <:::> e'. induction 1; eauto with slow. Qed.
+Hint Resolve red_conv.
+
+Hint Resolve rho_eval_to rho_eval_from_to.
+Lemma red_l_confl e1 e2 e3 : e1 ::> e2 -> e1 :::> e3 -> exists e4, e2 :::> e4 /\ e3 ::> e4.
+Proof. 
+  move=> He2 He3; move: e2 He2; induction He3; intros.
+  { eauto 7. }
+  { do 2 (try_hyps; intuition; destr_logic); clear_funs; eauto. }
+Qed.
+  
+Lemma red_confl e1 e2 e3 : e1 :::> e2 -> e1 :::> e3 -> exists e4, e2 :::> e4 /\ e3 :::> e4.
+Proof.
+  move=>He2 He3; move: e3 He3; induction He2; intros.
+  { extend red_l_confl; try_hyps; destr_logic; eauto. }
+  { do 2 (try_hyps; intuition; destr_logic); clear_funs; eauto. }
+Qed.
+
+(* DO NOT hint resolve red_confl! slows conv_double_red a lot *)
+
+Lemma conv_double_red : forall e1 e2, e1 <:::> e2 <-> (exists e3, e1 :::> e3 /\ e2 :::> e3).
+Proof.
+  split; move=>H; [|destr_logic; eauto with slow].
+  induction H; try solve[eauto].
+  - destr_logic; solve[eauto with slow].
+  - destr_logic. extend red_confl.
+    try_hyps; clear_funs; destr_logic; solve[eauto].
+Qed.
+
+(* Hint Resolve conv_double_red. *) (* not hinting because red_confl caused problems *)
+Hint Rewrite conv_double_red : unconv.
+
 (* Not working for now - need to add P_free rule *)
 (* Lemma red_Free nm e : Free nm :::> e <-> (e = Free nm) \/ (exists e', const_vals nm = Some e' /\ e' :::> e). *)
 (* Proof. split. *)
