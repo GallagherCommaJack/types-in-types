@@ -1,8 +1,22 @@
-Require Export Coq.Program.Program.
+Require Export Coq.Program.Program Coq.Classes.RelationClasses Omega.
+Require Export mathcomp.ssreflect.all_ssreflect.
 Require Export Tactics.
 Require Export MonadLib.
-Require Export mathcomp.ssreflect.all_ssreflect.
 (* notations *)
+
+Hint Resolve ltP leP eqP.
+Lemma reflect_iff P p : reflect P p -> p <-> P. destruct 1; split; auto; congruence. Qed.
+Hint Rewrite reflect_iff using solve [eauto] : bprop.
+Hint Rewrite <- reflect_iff using solve [eauto] : unprop.
+Ltac conv_to_prop := autorewrite with bprop in *.
+Ltac conv_from_prop := autorewrite with unprop in *.
+
+Ltac bdestruct X :=
+  let H := fresh in 
+  let e := fresh "e" in
+  evar (e: Prop); assert (H: reflect e X); subst e;
+  [eauto
+  | destruct H as [H|H]].
 
 Open Scope seq_scope.
 Notation "⟦ xs ⟧" := (size xs).
@@ -141,3 +155,24 @@ Canonical desc_eqType := EqType desc desc_eqMixin.
 (* Proof. induction D; simpl; intros X dX;  *)
 (*        assumption || decide equality || destruct d1,d2; eauto. *)
 (* Qed. *)
+
+
+Instance clos_trans_transitive A R : Transitive (clos_trans A R) := t_trans _ _.
+Instance clos_refl_trans_preorder A R : PreOrder (clos_refl_trans A R). split; eauto using clos_refl_trans. Qed.
+Instance clos_refl_sym_trans_equivalence A R : Equivalence (clos_refl_sym_trans A R). split; eauto using clos_refl_sym_trans. Qed.
+
+Hint Extern 1 (reflect (_ = _) (_ == _)) => apply eqP.
+Instance eqType_beq_equivalence (E : eqType) : Equivalence (fun e1 e2 : E => e1 == e2).
+Proof. split; unfold Reflexive; unfold Symmetric; unfold Transitive; intros.
+  - rewrite (reflect_iff (x = x)); eauto. 
+  - erewrite (reflect_iff (x = y)) in H; auto; rewrite (reflect_iff (y = x)); auto.
+  - erewrite (reflect_iff (x = y)) in H; auto.
+    erewrite (reflect_iff (y = z)) in H0; auto.
+    rewrite (reflect_iff (x = z)); solve[auto|congruence].    
+Qed.
+
+Instance leq_preorder : PreOrder (fun x y => x <= y).
+Proof. split; unfold Reflexive; unfold Transitive; intros; conv_to_prop; omega. Qed.
+  
+Instance ltn_preorder : Transitive (fun x y => x < y).
+Proof. unfold Transitive; intros; conv_to_prop; omega. Qed.

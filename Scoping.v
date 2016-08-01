@@ -4,6 +4,7 @@ Require Import Expr.
 (* This is the right way to define functions :) *)
 Notation "( && b )" := (fun b' => b' && b).
 Fixpoint closed_at (l : nat) (e : exp) : bool.
+Proof.
   destruct e; 
   repeat match goal with
            | [i : var |- _] => exact: (i < l)
@@ -82,7 +83,7 @@ Hint Rewrite upren_mono_less wk_mono upren_mono.
 Lemma upnren_mono : forall n sigma, mono sigma -> mono (upnren n sigma). intros n sigma. apply iterate_preserves; auto. Qed.
 Hint Resolve upnren_mono.
 Lemma upnren_mono_less : forall n v sigma, mono sigma -> upnren n sigma v <= sigma v.
-Proof. induction n; intros; rewrite ?iterate_S; auto. apply leq_trans with (n := upnren n sigma v); auto. Qed.
+Proof. induction n; intros; rewrite ?iterate_S; auto. transitivity (upnren n sigma v); auto. Qed.
 Hint Resolve upnren_mono_less.
 
 Hint Rewrite Bool.orb_false_r Bool.orb_true_iff.
@@ -101,55 +102,83 @@ Canonical sub_eq_refl : reflexive (var -> exp) (fun sigma tau => sub_eq sigma ta
 
 Hint Rewrite sub_vars_tms using auto.
 Hint Resolve sub_vars_tms.
-Lemma wk_upn : forall e d i j, closed_at d e -> closed_at (i + d) e.[upn j (wk i)].
-  move=>e d i j. 
-  replace e.[upn j (wk i)] with e.[ren (upnren j (+ i))] by (apply sub_vars_tms; autorewrite with core; auto).
-  move:d i j.
-  induction e; intros; auto;
-  try (unfold is_true in *; simpl in *; autorewrite with core in *; destr_logic; 
-       try (rewrite <- iterate_S; replace (i + d).+1 with (i + d.+1));
-       auto; fail).
-  { simpl in *. induction j; simpl. 
-    { unfold iterate; simpl. autorewrite with core in *; auto. }
-    { rewrite iterate_S. destruct v; simpl in *.
-      { destruct j; unfold iterate in *; simpl in *; induction i; auto. }
-      { assert ((upnren j (+i) v) <= i + v) by auto.
-        assert (i + v.+1 < i + d) by (autorewrite with core; auto).
-        replace (i + v.+1) with ((i + v).+1) in H1 by auto.
-        apply leq_ltn_trans with (n := (i + v).+1); auto. }}
-  }
+
+Notation closed_ren i j xi := (forall v, v < i -> xi v < j).
+Lemma ren_upren : forall i j xi, closed_ren i j xi -> closed_ren i.+1 j.+1 (upren xi).
+Proof. destruct v; simpl; intros; firstorder. Qed.
+Hint Resolve ren_upren.
+
+Lemma ren_closed_corr e : forall i j xi, closed_ren i j xi -> closed_at i e -> closed_at j e.[ren xi].
+Proof. induction e; simpl; intros; autounfold in *; destr bands;
+  try solve[auto|   (* this would just be eauto, but it seems to be broken with closed_at *)
+            asimpl; repeat (apply andb_true_intro; split);
+            eapply IHe || eapply IHe0 || eapply IHe1 || eapply IHe2;
+            eassumption || apply ren_upren; auto].
 Qed.
+Hint Resolve ren_closed_corr.
 
-Hint Resolve wk_upn.
+Lemma ren_wk_scoped : forall i j, closed_ren i (j + i) (+j). auto. Qed.
+Hint Resolve ren_wk_scoped.
+Lemma wk_scoped i j e : closed_at i e -> closed_at (j + i) e.[wk j]. eapply ren_closed_corr; auto. Qed.
+Hint Resolve wk_scoped.
+Lemma wk1_scoped i e  : closed_at i e -> closed_at i.+1 e.[wk 1]. change i.+1 with (1 + i); auto. Qed.
+Hint Resolve wk1_scoped.
+(* Lemma wk_upn : forall e d i j, closed_at d e -> closed_at (i + d) e.[upn j (wk i)]. *)
+(* Proof *)
+(*   move=>e d i j.  *)
+(*   replace e.[upn j (wk i)] with e.[ren (upnren j (+ i))] by (apply sub_vars_tms; autorewrite with core; auto). *)
+(*   move:d i j. *)
+(*   induction e; intros; auto; *)
+(*   try (unfold is_true in *; simpl in *; autorewrite with core in *; destr_logic;  *)
+(*        try (rewrite <- iterate_S; replace (i + d).+1 with (i + d.+1)); *)
+(*        auto; fail). *)
+(*   { simpl in *. induction j; simpl.  *)
+(*     { unfold iterate; simpl. autorewrite with core in *; auto. } *)
+(*     { rewrite iterate_S. destruct v; simpl in *. *)
+(*       { destruct j; unfold iterate in *; simpl in *; induction i; auto. } *)
+(*       { assert ((upnren j (+i) v) <= i + v) by auto. *)
+(*         assert (i + v.+1 < i + d) by (autorewrite with core; auto). *)
+(*         replace (i + v.+1) with ((i + v).+1) in H1 by auto. *)
+(*         apply leq_ltn_trans with (n := (i + v).+1); auto. }} *)
+(*   } *)
+(* Qed. *)
 
-Lemma sub_wk_vars : forall i j, sub_vars i (j + i) (wk j). intros; simpl; autorewrite with core; auto. Qed.
-Lemma sub_up_vars : forall i j sigma, sub_vars i j sigma -> sub_vars i.+1 j.+1 (up sigma). 
-Proof. intros. destruct v; asimpl; auto.
-  change (wk 1) with (upn 0 (wk 1)).
-  change j.+1 with (1 + j). apply wk_upn. auto.
-Qed.
+(* Hint Resolve wk_upn. *)
 
-Hint Resolve sub_wk_vars sub_up_vars.
+Lemma up_vars : forall i j sigma, sub_vars i j sigma -> sub_vars i.+1 j.+1 (up sigma).
+Proof. intros. destruct v; asimpl; auto. Qed.
+
+Lemma wk_vars : forall i, sub_vars i i.+1 (wk 1). auto. Qed.
+
+Hint Resolve up_vars wk_vars.
 Tactic Notation "htry" :=
   repeat match goal with
              [H: ?P -> _, H2 : ?P |- _] => extend (H H2)
-           | [H1: forall e, _, H2 : _ |- _] => 
+           | [H1: forall e, _, H2 : _ |- _] =>
              extend (H1 _ H2) || extend (H1 _ _ H2)
          end.
 
-Lemma sub_vars_corr : forall e i j sigma, sub_vars i j sigma -> closed_at i e -> closed_at j e.[sigma].
+Lemma sub_vars_scoped : forall e i j sigma, sub_vars i j sigma -> closed_at i e -> closed_at j e.[sigma].
 Proof. move=>e i j sigma Hs He.
   move: i He j sigma Hs.
   induction e; intros; simpl; rewrite asms; auto;
-  simpl in *; unfold is_true in *; destr bands; try apply sub_up_vars; eassumption || auto.
+  simpl in *; unfold is_true in *; destr bands; try apply up_vars; eassumption || auto.
 Qed.
 
-Hint Resolve sub_vars_corr.
-
-Lemma closed_wk : forall e n, closed_at n e -> closed_at n.+1 e.[wk 1]. intros. change n.+1 with (1 + n). eapply sub_vars_corr; eauto. Qed.
+Hint Resolve sub_vars_scoped.
 
 Lemma closed_sub_id : forall e sigma, closed e -> e.[sigma] = e.
 Proof. intros; apply closed_at_sub_id with (i := 0); intros; solve by inversion || auto. Qed.
+
+Lemma cons_vars_scoped e sigma i j : sub_vars i j sigma -> closed_at j e -> sub_vars i.+1 j (e .: sigma). intros; destruct v; simpl; auto. Qed.
+Hint Resolve cons_vars_scoped.
+Lemma cons_scoped sigma i j v e : sub_vars i j sigma -> closed_at j v -> closed_at i.+1 e -> closed_at j e.[v .: sigma].
+Proof. intros; eapply sub_vars_scoped; eassumption || apply cons_vars_scoped; auto. Qed.
+Hint Resolve cons_scoped.
+
+Lemma cons_id_scoped i v e : closed_at i v -> closed_at i.+1 e -> closed_at i e.[v/]. 
+Proof. apply cons_scoped with (i := i); auto. Qed.
+Hint Resolve cons_id_scoped.
 
 (* Axiom consts_wf : forall nm t, const_tys nm = Some t -> closed t. *)
 (* Axiom conv_sub : forall sigma t t', conv t t' -> conv t.[sigma] t'.[sigma]. *)
