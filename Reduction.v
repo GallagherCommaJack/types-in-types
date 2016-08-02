@@ -39,22 +39,24 @@ Inductive par_step : relation exp :=
 | P_lam    : forall b b', b ::> b' -> Lam b ::> Lam b'
 | P_app    : forall f f' a a', f ::> f' -> a ::> a' -> (f :$: a) ::> (f' :$: a')
 (* | P_beta   : forall f A b a a', f ::> (A :#> b) -> a ::> a' -> (f :$: a) ::> b.[a'/] *)
-| P_beta   : forall f b a a', f ::> Lam b -> a ::> a' -> (f :$: a) ::> b.[a'/]
+| P_beta   : forall u f b a a', f ::> Lam b -> a ::> a' -> u = b.[a'/] -> (f :$: a) ::> u
  
 | P_sig    : forall A A' B B', A ::> A' -> B ::> B' -> Sigma A B ::> Sigma A' B'
 | P_smk    : forall a a' b b', a ::> a' -> b ::> b' -> S_mk a b ::> S_mk a' b'
-| P_pi1    : forall s s', s ::> s' -> S_p1 s ::> S_p1 s'
-| P_pi2    : forall s s', s ::> s' -> S_p2 s ::> S_p2 s'
-| P_p1beta : forall s a b, s ::> S_mk a b -> S_p1 s ::> a
-| P_p2beta : forall s a b, s ::> S_mk a b -> S_p2 s ::> b
+| P_srec   : forall r r' p p', r ::> r' -> p ::> p' -> S_rec r p ::> S_rec r' p'
+| P_srec_beta : forall u r r' p a b, r ::> r' -> p ::> S_mk a b -> u = r'.[b,a/] -> S_rec r p ::> u
+(* | P_pi1    : forall s s', s ::> s' -> S_p1 s ::> S_p1 s' *)
+(* | P_pi2    : forall s s', s ::> s' -> S_p2 s ::> S_p2 s' *)
+(* | P_p1beta : forall s a b, s ::> S_mk a b -> S_p1 s ::> a *)
+(* | P_p2beta : forall s a b, s ::> S_mk a b -> S_p2 s ::> b *)
  
 | P_Sum    : forall A A' B B', A ::> A' -> B ::> B' -> Sum A B ::> Sum A' B'
 | P_inl    : forall a a', a ::> a' -> Sum_inl a ::> Sum_inl a'
 | P_inr    : forall b b', b ::> b' -> Sum_inr b ::> Sum_inr b'
 (* | P_split  : forall C C' a a' b b' ab ab', C ::> C' -> a ::> a' -> b ::> b' -> ab ::> ab' -> Split C a b ab ::> Split C' a' b' ab' *)
 | P_split  : forall a a' b b' ab ab',  a ::> a' -> b ::> b' -> ab ::> ab' -> Split a b ab ::> Split a' b' ab'
-| P_split_l : forall ca ca' cb ab a, ca ::> ca' -> ab ::> Sum_inl a -> Split ca cb ab ::> ca'.[a/]
-| P_split_r : forall ca cb cb' ab b, cb ::> cb' -> ab ::> Sum_inr b -> Split ca cb ab ::> cb'.[b/]
+| P_split_l : forall u ca ca' cb ab a, ca ::> ca' -> ab ::> Sum_inl a -> u = ca'.[a/] -> Split ca cb ab ::> u
+| P_split_r : forall u ca cb cb' ab b, cb ::> cb' -> ab ::> Sum_inr b -> u = cb'.[b/] -> Split ca cb ab ::> u
  
 (* | P_emrec  : forall C C' e e', C ::> C' -> e ::> e' -> empty_rec C e ::> empty_rec C' e' *)
 (* | P_emrec  : forall e e', e ::> e' -> empty_rec e ::> empty_rec e' *)
@@ -69,7 +71,10 @@ Inductive par_step : relation exp :=
                                                      
 (* | P_Mu : forall D, Mu D ::> D_efunc D (Mu D) *)
 | P_mu : forall D r r' d d', r ::> r' -> d ::> d' -> mu D r d ::> mu D r' d'
-| P_mu_rec : forall D r r' e e', r ::> r' -> e ::> e' -> mu D r e ::> (r' :$: e' :$: rall D (mu D r'.[wk 1] (Bind 0)) e')
+| P_mu_rec : forall u D r r' e e', r ::> r' -> e ::> e' -> 
+                              u = r'.[rall D (mu D r'.[upn 2 (wk 1)] (Bind 0)) e', e'/] ->
+                              (* u = (r' :$: e' :$: rall D (mu D r'.[wk 1] (Bind 0)) e') -> *)
+                              mu D r e ::> u
 (* | P_mu_rec : forall D P P' r r' e e', P ::> P' -> r ::> r' -> e ::> Wrap e' ->  *)
                                  (* mu D P r e ::> (r' :$: Wrap e' :$: rall P D (mu D P.[wk 1] r.[wk 1] (Bind 0)) e) *)
 where "a ::> b" := (par_step a b).
@@ -88,14 +93,10 @@ Fixpoint rho (e : exp) : exp :=
 
     | Sigma A B => Sigma (rho A) (rho B)
     | S_mk a b => S_mk (rho a) (rho b)
-    | S_p1 ab => match rho ab with
-                 | S_mk a b => a
-                 | ab' => S_p1 ab'
-               end
-    | S_p2 ab => match rho ab with
-                 | S_mk a b => b
-                 | ab' => S_p2 ab'
-                end
+    | S_rec r ab => match rho ab with
+                     | S_mk a b => (rho r).[b,a/]
+                     | ab' => S_rec (rho r) ab'
+                   end
 
     | Sum A B => Sum (rho A) (rho B)
     | Sum_inl a => Sum_inl (rho a)
@@ -121,7 +122,7 @@ Fixpoint rho (e : exp) : exp :=
     (*              end *)
 
     (* | Mu D => D_efunc D (Mu D) *)
-    | mu D r d => (rho r) :$: (rho d) :$: rall D (mu D (rho r).[wk 1] (Bind 0)) (rho d)
+    | mu D r d => (rho r).[rall D (mu D (rho r).[upn 2 (wk 1)] (Bind 0)) (rho d), (rho d)/]
 
     | _ => e
   end.
@@ -189,32 +190,36 @@ Hint Constructors par_step.
 Lemma rall_sub D : forall r e sigma, (rall D r e).[sigma] = rall D r.[up sigma] e.[sigma].
 Proof. induction D; intros; auto; simpl; rewrite asms; autosubst. Qed.
 Hint Rewrite rall_sub.   
+Hint Rewrite rall_sub : autosubst.
 
 Hint Extern 1 (Free ?nm ::> ?e.[_]) => rewrite closed_sub_id; [constructor|eapply const_vals_closed]; eassumption.
 Hint Extern 1 (const_vals ?nm = Some ?e.[_]) => rewrite closed_sub_id; try eapply const_vals_closed; eassumption.
 Hint Resolve closed_sub_id.
-Lemma sub_cong1 : forall e1 e2, e1 ::> e2 -> forall sigma, e1.[sigma] ::> e2.[sigma].
-Proof. induction 1; intros; simpl in *;
-  rewrite ?rall_sub; simpl; autorewrite with core; try solve[try constructor; eauto].
-Qed.
-Local Hint Resolve sub_cong1.
+Lemma step_cong1 : forall e1 e2, e1 ::> e2 -> forall sigma, e1.[sigma] ::> e2.[sigma].
+Proof. induction 1; intros; simpl in *; subst; try solve[try econstructor; eauto; autosubst]. Qed.
+Local Hint Resolve step_cong1.
 
-Lemma subst_up : forall c1 c2, c1 .> c2 -> up c1 .> up c2.
+Lemma step_up : forall c1 c2, c1 .> c2 -> up c1 .> up c2.
 Proof. intros. destruct v; asimpl; auto. Qed.
 
-Hint Resolve subst_up.
+Hint Resolve step_up.
 
-Lemma sub_cong2 : forall e c1 c2, c1 .> c2 -> e.[c1] ::> e.[c2].
+Tactic Notation "auto" "upn" ident(n) := induction n; intros; repeat rewrite <- fold_up_upn; auto.
+Lemma step_upn n : forall c1 c2, c1 .> c2 -> upn n c1 .> upn n c2. auto upn n. Qed.
+Hint Resolve step_upn.
+
+Lemma step_cong2 : forall e c1 c2, c1 .> c2 -> e.[c1] ::> e.[c2].
 Proof. induction e; intros; simpl in *; try econstructor; eauto. Qed.
 
-Local Hint Resolve sub_cong2.
+Local Hint Resolve step_cong2.
 
-Lemma sub_cong : forall e1 e2, e1 ::> e2 -> forall c1 c2, c1 .> c2 -> e1.[c1] ::> e2.[c2].
-Proof. induction 1; intros; simpl in *; try solve [auto];
-  repeat (simpl; autorewrite with core); try solve [econstructor; eauto].
+Lemma step_cong : forall e1 e2, e1 ::> e2 -> forall c1 c2, c1 .> c2 -> e1.[c1] ::> e2.[c2].
+Proof. induction 1; intros; simpl in *; subst; auto; econstructor;
+  try (eapply IHpar_step1 || eapply IHpar_step2); try (eapply step_upn || eapply step_up);
+  eassumption || autosubst.
 Qed.
 
-Hint Resolve sub_cong.
+Hint Resolve step_cong.
 
 Lemma sub_cons : forall e e' sigma tau, e ::> e' -> sigma .> tau -> (e .: sigma) .> (e' .: tau). destruct v; simpl; auto. Qed.
 
@@ -228,7 +233,7 @@ Lemma rall_ev D : forall r r', r ::> r' -> forall e e', e ::>  e' -> rall D r e 
 Hint Resolve rall_ev.
 
 Lemma rho_eval_from_to e e' : e ::> e' -> e' ::> rho e.
-Proof. induction 1; simpl; try (invert value steps || destruct match); eauto 10; try solve by inversion.
+Proof. induction 1; simpl; try (invert value steps || destruct match); subst; eauto 10; try solve by inversion.
   inverts H; auto.
 Qed.
 
@@ -238,6 +243,8 @@ Notation conv := (clos_refl_sym_trans _ par_step).
 Notation red := (clos_trans _ par_step).
 Infix "<:::>" := conv (at level 50).
 Infix ":::>" := red (at level 50).
+
+Instance red_refl : Reflexive red. auto. Qed.
 
 Local Hint Resolve t_step rst_step rst_refl.
 Local Hint Resolve t_trans rst_trans rst_sym : slow.
@@ -266,9 +273,11 @@ Hint Resolve red_Sum_Sum.
 Lemma red_Lam_Lam : forall e e', e :::> e' -> Lam e :::> Lam e'. induction 1; eauto. Qed.
 Hint Resolve red_Lam_Lam.
 
-Lemma red_S_p1_S_p1 : forall e e', e :::> e' -> S_p1 e :::> S_p1 e'. induction 1; eauto. Qed.
-Lemma red_S_p2_S_p2 : forall e e', e :::> e' -> S_p2 e :::> S_p2 e'. induction 1; eauto. Qed.
-Hint Resolve red_S_p1_S_p1 red_S_p2_S_p2.
+Lemma red_Srec_l : forall r e r', r :::> r' -> S_rec r e :::> S_rec r' e. induction 1; auto; transitivity (S_rec y e); auto. Qed.
+Lemma red_Srec_r : forall r e e', e :::> e' -> S_rec r e :::> S_rec r e'. induction 1; auto; transitivity (S_rec r y); auto. Qed.
+Local Hint Resolve red_Srec_l red_Srec_r.
+Lemma red_Srec_Srec r e r' e' : r :::> r' -> e :::> e' -> S_rec r e :::> S_rec r' e'. transitivity (S_rec r' e); auto. Qed.
+Hint Resolve red_Srec_Srec.
 
 Lemma red_Sum_inl_Sum_inl : forall e e', e :::> e' -> Sum_inl e :::> Sum_inl e'. induction 1; eauto. Qed.
 Lemma red_Sum_inr_Sum_inr : forall e e', e :::> e' -> Sum_inr e :::> Sum_inr e'. induction 1; eauto. Qed.
@@ -288,20 +297,20 @@ Local Hint Resolve red_S_mk_l red_S_mk_r.
 Lemma red_S_mk_S_mk a b a' b' : a :::> a' -> b :::> b' -> S_mk a b :::> S_mk a' b'. eauto. Qed.
 Hint Resolve red_S_mk_S_mk.
 
-Lemma red_Split_1 a b c a' : (a :::> a') -> Split a b c :::> Split a' b c. induction 1; eauto. Qed.
-Lemma red_Split_2 a b c b' : (b :::> b') -> Split a b c :::> Split a b' c. induction 1; eauto. Qed.
-Lemma red_Split_3 a b c c' : (c :::> c') -> Split a b c :::> Split a b c'. induction 1; eauto. Qed.
+Lemma red_Split_1 a b c a' : (a :::> a') -> Split a b c :::> Split a' b c. induction 1; auto; transitivity (Split y b c); auto. Qed.
+Lemma red_Split_2 a b c b' : (b :::> b') -> Split a b c :::> Split a b' c. induction 1; auto; transitivity (Split a y c); auto. Qed.
+Lemma red_Split_3 a b c c' : (c :::> c') -> Split a b c :::> Split a b c'. induction 1; auto; transitivity (Split a b y); auto. Qed.
 Local Hint Resolve red_Split_1 red_Split_2 red_Split_3.
 
 Lemma red_Split_Split a b c a' b' c' : (a :::> a') -> (b :::> b') -> (c :::> c') -> Split a b c :::> Split a' b' c'.
-Proof. intros. transitivity (Split a' b c); eauto. Qed.
+Proof. transitivity (Split a' b c); auto; transitivity (Split a' b' c); auto. Qed.
 Hint Resolve red_Split_Split.
 
-Lemma red_mu_l D : forall A B A', A :::> A' -> mu D A B :::> mu D A' B. induction 1; eauto. Qed.
-Lemma red_mu_r D : forall A B B', B :::> B' -> mu D A B :::> mu D A B'. induction 1; eauto. Qed.
+Lemma red_mu_l D : forall A B A', A :::> A' -> mu D A B :::> mu D A' B. induction 1; auto. transitivity (mu D y B); auto. Qed.
+Lemma red_mu_r D : forall A B B', B :::> B' -> mu D A B :::> mu D A B'. induction 1; auto; transitivity (mu D A y); auto. Qed.
 Local Hint Resolve red_mu_l red_mu_r.
 
-Lemma red_mu_mu D A B A' B' : (A :::> A') -> (B :::> B') -> mu D A B :::> mu D A' B'. eauto. Qed.
+Lemma red_mu_mu D A B A' B' : (A :::> A') -> (B :::> B') -> mu D A B :::> mu D A' B'. transitivity (mu D A' B); auto. Qed.
 Hint Resolve red_mu_mu.
 
 Lemma red_Free nm e : Free nm :::> e <-> (e = Free nm) \/ (exists v, const_vals nm = Some v /\ v :::> e).
@@ -433,6 +442,8 @@ Lemma sred_trans : forall delta sigma tau, delta ..> sigma -> sigma ..> tau -> d
 
 Lemma up_sred : forall sigma tau, sigma ..> tau -> up sigma ..> up tau. intros; destruct i; asimpl; auto. Qed.
 Hint Resolve up_sred sub_sred sred_ref.
+Lemma upn_sred n : forall sigma tau, sigma ..> tau -> upn n sigma ..> upn n tau. auto upn n. Qed.
+Hint Resolve upn_sred.
 
 Lemma sred_cong2 : forall e sigma tau, sigma ..> tau -> e.[sigma] :::> e.[tau]. induction e; intros; simpl; auto. Qed.
 Local Hint Resolve sred_cong2.
@@ -451,33 +462,23 @@ Proof. split.
       specialize (IHHred2 _ _ erefl).
       destr_logic; subst; [left|right]; eauto 7. } }
   { intros; destr_logic; subst; auto.
-    eapply t_trans with (y := Lam _ :$: a); eauto. }
+    eapply t_trans with (y := Lam _ :$: a);
+      [|eapply t_trans with (y := _.[a/])]; eauto. }
 Qed.
 
-Lemma red_S_p1 p e : S_p1 p :::> e <-> (exists p', e = S_p1 p' /\ p :::> p') \/ (exists a b, p :::> S_mk a b /\ a :::> e).
+Lemma red_Srec r p e : S_rec r p :::> e <-> (exists r' p', e = S_rec r' p' /\ r :::> r' /\ p :::> p') \/
+                                          (exists a b, p :::> S_mk a b /\ r.[b,a/] :::> e).
 Proof. split.
-  { remember (S_p1 p) as sp.
-    move=>Hred; move: p Heqsp; induction Hred; intros; subst.
-    { inversion H; subst; solve[left; eauto 7 | right; eauto 7]. }
-    { specialize (IHHred1 _ erefl).
-      destr_logic; subst; [|right;eauto].
-      specialize (IHHred2 _ erefl).
-      destr_logic; subst; [left|right]; eauto. } }
+  { remember (S_rec r p) as srp.
+    move=>Hred; move: r p Heqsrp; induction Hred; intros; subst.
+    { inverts H; solve[left; eauto 7 | right; eauto 10]. }
+    { specialize (IHHred1 _ _ erefl).
+      destr_logic; subst; [|right; eauto].
+      specialize (IHHred2 _ _ erefl).
+      destr_logic; subst; [left|right]; eauto 7. } }
   { intros; destr_logic; subst; auto.
-    eapply t_trans with (y := S_p1 (S_mk _ _)); eauto. }
-Qed.
-    
-Lemma red_S_p2 p e : S_p2 p :::> e <-> (exists p', e = S_p2 p' /\ p :::> p') \/ (exists a b, p :::> S_mk a b /\ b :::> e).
-Proof. split.
-  { remember (S_p2 p) as sp.
-    move=>Hred; move: p Heqsp; induction Hred; intros; subst.
-    { inversion H; subst; solve[left; eauto 7 | right; eauto 7]. }
-    { specialize (IHHred1 _ erefl).
-      destr_logic; subst; [|right;eauto].
-      specialize (IHHred2 _ erefl).
-      destr_logic; subst; [left|right]; eauto. } }
-  { intros; destr_logic; subst; auto.
-    eapply t_trans with (y := S_p2 (S_mk _ _)); eauto. }
+    eapply t_trans with (y := S_rec r (S_mk _ _));
+      [|eapply t_trans with (y := r.[_,_/])]; eauto. }
 Qed.
 
 Lemma red_Split a b c e : Split a b c :::> e <-> (exists a' b' c', e = Split a' b' c' /\ a :::> a' /\ b :::> b' /\ c :::> c')
@@ -492,7 +493,8 @@ Proof. split.
       specialize (IHHred2 _ _ _ erefl).
       destr_logic; subst; try solve[left;eauto 10|right;eauto 7]. } }
   { intros; destr_logic; subst; auto;
-    eapply t_trans; eauto. }
+    [eapply t_trans with (y := Split a b _); [|eapply t_trans with (y := a.[_/])]|
+     eapply t_trans with (y := Split a b _); [|eapply t_trans with (y := b.[_/])]]; eauto. }
 Qed.
 
 Lemma red_rall_l D r d r' : r :::> r' -> rall D r d :::> rall D r' d. induction 1; eauto. Qed.
@@ -502,20 +504,21 @@ Lemma red_rall_rall D r d r' d' : r :::> r' -> d :::> d' -> rall D r d :::> rall
 Hint Resolve red_rall_rall.
 
 Lemma red_mu D r d e : mu D r d :::> e <-> (exists r' d', e = mu D r' d' /\ r :::> r' /\ d :::> d') 
-                                        \/ (r :$: d :$: rall D (mu D r.[wk 1] (Bind 0)) d) :::> e.
+                                        \/ (r.[rall D (mu D r.[upn 2 (wk 1)] (Bind 0)) d, d/] :::> e).
 Proof. split.
   { remember (mu D r d) as mdrd.
     move=>Hred; move: r d Heqmdrd; induction Hred; intros; subst.
     { inversion H; subst; try solve[left;eauto 7|right;eauto 10]. }
     { specialize (IHHred1 _ _ erefl).
-      destr_logic; subst; try solve[right;eauto].
+      destr_logic; [subst|right;eauto].
       specialize (IHHred2 _ _ erefl).
-      destr_logic; subst; solve[right; eapply t_trans; eassumption || apply red_App_App; auto|left;eauto 10]. } }
+      destr_logic; subst; [left;eauto 10|right].
+      eapply t_trans with (y := _.[_,_/]); try eassumption; apply sred_cong; auto. } }
   { intros; destr_logic; subst; auto.
-    eapply t_trans with (y := _ :$: _ :$: _); try eassumption; eauto. }
+    eapply t_trans with (y := _.[_,_/]); try eassumption; eauto. }
 Qed.
 
-Hint Rewrite red_Free red_App red_S_p1 red_S_p2 red_Split red_mu : beta.
+Hint Rewrite red_Free red_App red_Srec red_Split red_mu : beta.
 
 Lemma red_conv : forall e e', e :::> e' -> e <:::> e'. induction 1; eauto with slow. Qed.
 Hint Resolve red_conv.
@@ -618,18 +621,14 @@ Lemma conv_Lam_Lam : forall b1 b2, b1 <:::> b2 -> Lam b1 <:::> Lam b2. intros; a
 
 Hint Resolve conv_Pi_Pi conv_Sigma_Sigma conv_Sum_Sum conv_S_mk_S_mk conv_Lam_Lam.
 
-Lemma conv_S_p1_S_p1 : forall e e', e <:::> e' -> S_p1 e <:::> S_p1 e'.
+Lemma conv_Srec_Srec : forall r p r' p', r <:::> r' -> p <:::> p' -> S_rec r p <:::> S_rec r' p'.
 Proof. intros; autorewrite with unconv in *; destr_logic; eauto. Qed.
 
-Lemma conv_S_p2_S_p2 : forall e e', e <:::> e' -> S_p2 e <:::> S_p2 e'.
-Proof. intros; autorewrite with unconv in *; destr_logic; eauto. Qed.
-
-Hint Resolve conv_S_p1_S_p1 red_S_p2_S_p2.
+Hint Resolve conv_Srec_Srec.
 
 Lemma conv_Sum_inl_Sum_inl : forall e e', e <:::> e' -> Sum_inl e <:::> Sum_inl e'. intros; autorewrite with core; auto. Qed.
 Lemma conv_Sum_inr_Sum_inr : forall e e', e <:::> e' -> Sum_inr e <:::> Sum_inr e'. intros; autorewrite with core; auto. Qed.
 Hint Resolve conv_Sum_inl_Sum_inl conv_Sum_inr_Sum_inr.
-
 
 Lemma conv_App_App f a f' a' : (f <:::> f') -> (a <:::> a') -> ((f :$: a) <:::> (f' :$: a')).
 Proof. autorewrite with unconv; intros; destr_logic; autorewrite with core in *; destr_logic; eauto. Qed.
@@ -647,17 +646,19 @@ Lemma sconv_cong1 sigma e1 e2 : e1 <:::> e2 -> e1.[sigma] <:::> e2.[sigma].
 Proof. autorewrite with unconv; intros; destr_logic; eauto. Qed.
 Hint Resolve sconv_cong1.
 
-Lemma sub_up sigma tau : sigma <..> tau -> up sigma <..> up tau.
+Lemma sconv_up sigma tau : sigma <..> tau -> up sigma <..> up tau.
 Proof. intros; destruct i; asimpl; auto. Qed.
-Hint Resolve sub_up.
+Hint Resolve sconv_up.
+
+Lemma sconv_upn n sigma tau : sigma <..> tau -> upn n sigma <..> upn n tau. auto upn n. Qed.
+Hint Resolve sconv_upn.
 
 Lemma sconv_cong2 e : forall sigma tau, sigma <..> tau -> e.[sigma] <:::> e.[tau].
-Proof. induction e; simpl; auto 10.
-  - intros; apply conv_S_p2_S_p2; auto. (* for some reason this case doesn't work on its own *)
-Qed.
+Proof. induction e; simpl; auto 10. Qed.
 Hint Resolve sconv_cong2.
 
 Lemma sconv_cong e1 e2 sigma tau : e1 <:::> e2 -> sigma <..> tau -> e1.[sigma] <:::> e2.[tau]. intros; transitivity (e1.[tau]); auto. Qed.
+Hint Resolve sconv_cong.
 
 Definition subtyp A B := (A <:::> B \/ exists i j, A <:::> Sort i /\ B <:::> Sort j /\ i < j).
 Infix "::<<" := subtyp (at level 20).

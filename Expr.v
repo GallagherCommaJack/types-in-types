@@ -19,8 +19,9 @@ Inductive exp : Type :=
 
 | Sigma : exp -> {bind exp} -> exp
 | S_mk : exp ->  exp -> exp
-| S_p1 : exp -> exp
-| S_p2 : exp -> exp
+| S_rec : {bind 2 of exp} -> exp -> exp
+(* | S_p1 : exp -> exp *)
+(* | S_p2 : exp -> exp *)
 
 | Sum : exp -> exp -> exp
 | Sum_inl : exp -> exp
@@ -36,7 +37,12 @@ Inductive exp : Type :=
 | Mu : desc -> exp
 (* | Wrap : exp -> exp *)
 (* | Unwrap : exp -> exp *)
-| mu : desc -> exp -> exp -> exp.
+| mu : desc -> {bind 2 of exp} -> exp -> exp.
+
+Instance Ids_exp : Ids exp. derive. Defined.
+Instance Rename_exp : Rename exp. derive. Defined.
+Instance Subst_exp : Subst exp. derive. Defined.
+Instance SubstLemmas_exp : SubstLemmas exp. derive. Qed.
 
 Hint Resolve internal_nat_dec_lb internal_nat_dec_bl.
 
@@ -60,11 +66,6 @@ Infix ":#>" := Lam (at level 30, right associativity).
 Infix ":$:" := App (at level 50, left associativity).
 Notation "<< a ;; b >>" := (S_mk a b).
 
-Instance Ids_exp : Ids exp. derive. Defined.
-Instance Rename_exp : Rename exp. derive. Defined.
-Instance Subst_exp : Subst exp. derive. Defined.
-Instance SubstLemmas_exp : SubstLemmas exp. derive. Qed.
-
 Notation Prd A B := (Sigma A (B.[ren (+1)])).
 Infix ":*:" := Prd (at level 10).
 
@@ -78,6 +79,9 @@ Fixpoint D_efunc (D : desc) (X : exp) : exp :=
 
 Notation wk n := (ren (+ n)).
 
+Notation S_p1 e := (S_rec (Bind 1) e).
+Notation S_p2 e := (S_rec (Bind 0) e).
+
 Fixpoint All (d : desc) (P : {bind exp}) (e : exp) :=
   match d with 
       d_One => Unit
@@ -86,7 +90,7 @@ Fixpoint All (d : desc) (P : {bind exp}) (e : exp) :=
                       (All d1 P.[up (wk 1)] (Bind 0))
                       (All d2 P.[up (wk 1)] (Bind 0))
                       e
-    | d_Prd d1 d2 => Prd (All d1 P (S_p1 e)) (All d2 P (S_p2 e))
+    | d_Prd d1 d2 => S_rec (Prd (All d1 P.[up (wk 2)] (Bind 1)) (All d2 P.[up (wk 2)] (Bind 0))) e
   end.
 
 Fixpoint rall (d : desc) (r : {bind exp}) (e : exp) :=
@@ -98,5 +102,5 @@ Fixpoint rall (d : desc) (r : {bind exp}) (e : exp) :=
                       (rall d1 r.[up (wk 1)] (Bind 0))
                       (rall d2 r.[up (wk 1)] (Bind 0))
                       e
-    | d_Prd d1 d2 => S_mk (rall d1 r (S_p1 e)) (rall d2 r (S_p2 e))
+    | d_Prd d1 d2 => S_rec (S_mk (rall d1 r.[up (wk 2)] (Bind 1)) (rall d2 r.[up (wk 2)] (Bind 0))) e
   end.

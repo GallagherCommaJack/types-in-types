@@ -1,18 +1,10 @@
 Require Import Prelude.
-Require Import Expr. 
-Require Import Scoping. 
-Require Import Reduction.
+Require Import Expr Scoping Reduction RedScoping. 
 
 Notation typ := exp.
 Notation con := (seq exp).
-Inductive subtyp : typ -> typ -> Prop :=
-| sub_conv : forall T1 T2, T1 <:::> T2 -> subtyp T1 T2
-| sub_cumu : forall T1 l1 l2 T2, T1 <:::> (Sort l1) -> T2 <:::> (Sort l2) -> l1 < l2 -> subtyp T1 T2.
 
-Hint Constructors subtyp.
-Infix "::<" := subtyp (at level 20).
-
-Hint Resolve sub_conv.
+Hint Resolve subtyp_cong1.
 Hint Resolve leP ltP eqP.
 
 Variable const_tys : env exp.
@@ -45,30 +37,32 @@ Definition imax (i j : nat) := match j with 0 => 0 | _ => max i j end.
 (* where "[ C |+ e :< t ]" := (has_type C e T). *)
 
 Inductive has_type (Gamma : seq exp) : exp ->  exp -> Prop :=
-  T_bind : forall i, i < size Gamma -> [Gamma |+ Bind i :< dget Gamma i]
+  T_bind : forall i u, i < size Gamma -> u = dget Gamma i -> [Gamma |+ Bind i :< u]
 | T_free : forall nm t, const_tys nm = Some t -> [Gamma |+ Free nm :< t]
 | T_sort : forall s, [Gamma |+ Sort s :< Sort s.+1]
 (* | T_cumu : forall i j, [Gamma |+ i :< Sort j] -> [Gamma |+ i :< Sort j.+1] *)
 (* | T_set : [Gamma |+ Sort set :< Sort typ] *)
-| T_pi : forall A B u1 u2, [Gamma |+ A :< Sort u1] -> [(A :: Gamma) |+ B :< Sort u2] -> [Gamma |+ (A :>> B) :< Sort (imax u1 u2)]
+| T_pi : forall A B l1 l2, [Gamma |+ A :< Sort l1] -> [(A :: Gamma) |+ B :< Sort l2] -> [Gamma |+ (A :>> B) :< Sort (imax l1 l2)]
 | T_lam : forall A B b, [(A :: Gamma) |+ b :< B] -> [Gamma |+ (Lam b) :< (A :>> B)]
-| T_app : forall A B f a, [Gamma |+ f :< (A :>> B)] -> [Gamma |+ a :< A] -> [Gamma |+ (f :$: a) :< B.[a/]]
-| T_sig :  forall A B u1 u2, [Gamma |+ A :< Sort u1] -> [(A :: Gamma) |+ B :< Sort u2] -> [Gamma |+ Sigma A B :< Sort (imax u1 u2)]
-| T_smk : forall A B a b, [Gamma |+ a :< A] -> [Gamma |+ b :< B.[a/]] -> [Gamma |+ S_mk a b :< Sigma A B]
-| T_p1  : forall A B s, [Gamma |+ s :< Sigma A B] -> [Gamma |+ S_p1 s :< A]
-| T_p2  : forall A B s, [Gamma |+ s :< Sigma A B] -> [Gamma |+ S_p2 s :< B.[S_p1 s/]]
+| T_app : forall A B f a u, [Gamma |+ f :< (A :>> B)] -> [Gamma |+ a :< A] -> u = B.[a/] -> [Gamma |+ (f :$: a) :< u]
+| T_sig : forall A B l1 l2, [Gamma |+ A :< Sort l1] -> [(A :: Gamma) |+ B :< Sort l2] -> [Gamma |+ Sigma A B :< Sort (imax l1 l2)]
+| T_smk : forall A B a b u, [Gamma |+ a :< A] -> 
+                       u = B.[a/] -> [Gamma |+ b :< u] ->
+                       [Gamma |+ S_mk a b :< Sigma A B]
+| T_srec : forall C A B r p u1 u2, 
+             u1 = C.[S_mk (Bind 1) (Bind 0) .: wk 2] -> [B :: A :: Gamma |+ r :< u1] -> 
+             [Gamma |+ p :< Sigma A B] -> 
+             u2 = C.[p/] -> [Gamma |+ S_rec r p :< u2]
+(* | T_p1  : forall A B s, [Gamma |+ s :< Sigma A B] -> [Gamma |+ S_p1 s :< A] *)
+(* | T_p2  : forall A B s, [Gamma |+ s :< Sigma A B] -> [Gamma |+ S_p2 s :< B.[S_p1 s/]] *)
 
-(* | T_sum : forall A B u1 u2, [Gamma |+ A :< Sort u1] -> [Gamma |+ B :< Sort u2] -> [Gamma |+ Sum A B :< Sort (max u1 u2)] *)
+(* | T_sum : forall A B l1 l2, [Gamma |+ A :< Sort l1] -> [Gamma |+ B :< Sort l2] -> [Gamma |+ Sum A B :< Sort (max l1 l2)] *)
 | T_inl : forall A B a, [Gamma |+ a :< A] -> [Gamma |+ Sum_inl a :< Sum A B]
 | T_inr : forall A B b, [Gamma |+ b :< B] -> [Gamma |+ Sum_inr b :< Sum A B]
-| T_split : forall P A B a b ab,
-            (* forall n, [(Sum A B :: Gamma) |+ P :< Sort n] -> *)
-              (* [(Sum A B :: Gamma) |+ P] -> *) 
-                 [(    A   :: Gamma) |+ a              :< P.[Sum_inl (Bind 0) .: wk 1]] ->
-                 [(      B :: Gamma) |+ b              :< P.[Sum_inr (Bind 0) .: wk 1]] ->
-                 [            Gamma  |+ ab             :< Sum A B] ->
-                 (* [            Gamma  |+ Split P a b ab :< P.[ab/]] *)
-                 [            Gamma  |+ Split a b ab   :< P.[ab/]]
+| T_split : forall P A B a b ab u1 u2 u3,
+              u1 = P.[Sum_inl (Bind 0) .: wk 1] -> [(A :: Gamma) |+ a :< u1] ->
+              u2 = P.[Sum_inr (Bind 0) .: wk 1] -> [(B :: Gamma) |+ b :< u2] ->
+              u3 = P.[ab/] -> [Gamma |+ Split a b ab :< u3]
                      
 (* | T_Unit : [Gamma |+ Unit :< Sort set] *)
 | T_unit : [Gamma |+ unit :< Unit]
@@ -76,17 +70,20 @@ Inductive has_type (Gamma : seq exp) : exp ->  exp -> Prop :=
 (* | T_Mu  : forall D, [Gamma |+ Mu D :< Sort set] *)
 (* | T_Wrap : forall d D, [Gamma |+ d :< D_efunc D (Mu D)] -> [Gamma |+ Wrap d :< Mu D] *)
 (* | T_Unwrap : forall d D, [Gamma |+ d :< Mu D] -> [Gamma |+ Unwrap d :< D_efunc D (Mu D)] *)
-| T_mu : forall D C a d, 
+| T_mu : forall D C r d u1 u2 u3, 
          forall n, [(Mu D :: Gamma) |+ C :< Sort n] ->
            (* [(Mu D :: Gamma) |+ C] -> *)
-              [Gamma   |+ a :< (Mu D :>> (All D C.[up (wk 1)] (Bind 0) :>> C.[Bind 1 .: wk 2]))] ->
+              u1 = All D C.[up (wk 1)] (Bind 0) -> 
+              u2 = C.[Bind 1 .: wk 2] ->
+              [u1 :: Mu D :: Gamma |+ r :< u2] ->
               [Gamma   |+ d :< Mu D] ->
-              [Gamma   |+ mu D a d :< C.[d/]]
+              u3 = C.[d/] ->
+              [Gamma   |+ mu D r d :< u3]
 
 (* | T_conv : forall A A', conv A A' -> forall a, [Gamma |+ a :< A] -> [Gamma |+ a :< A'] *)
 | T_wrap   : forall D d, [Gamma |+ d :< D_efunc D (Mu D)] -> [Gamma |+ d :< Mu D]
-| T_unwrap : forall D d, [Gamma |+ d :< Mu D] -> [Gamma |+ d :< D_efunc D (Mu D)]
-| T_subty : forall a A A', A ::< A' -> [Gamma |+ a :< A] -> [Gamma |+ a :< A']
+| T_unwrap : forall D d u, [Gamma |+ d :< Mu D] -> u = D_efunc D (Mu D) -> [Gamma |+ d :< u]
+| T_subty : forall a A A', A ::<< A' -> [Gamma |+ a :< A] -> [Gamma |+ a :< A']
 where "[ C |+ e :< t ]" := (has_type C e t).
 
 Hypothesis const_tys_vals : forall nm t e, const_tys nm = Some t /\ Reduction.const_vals nm = Some e -> [nil |+ e :< t].
@@ -130,85 +127,70 @@ Qed.
   
 Functional Scheme sub_ind := Induction for minus Sort Prop.
 
-Notation ren_scop xi i j := (forall v, v < i -> xi v < j).
-
-Lemma All_sub D : forall sigma C e, (All D C e).[sigma] = All D C.[up sigma] e.[sigma].
-  induction D; intros; simpl; rewrite asms; 
-  try replace C.[up (wk 1)].[up (up sigma)] with C.[up sigma].[up (wk 1)]; autosubst. Qed.
-
-Hint Resolve All_sub.
-Hint Rewrite All_sub.
-
 Hypothesis const_tys_closed : forall nm e, const_tys nm = Some e -> closed e.
 
 Hint Resolve const_tys_closed.
 Hint Resolve efunc_closed.
 Hint Resolve red_conv sred_cong1.
 
-Lemma conv_sub1 a b sigma : a <:::> b -> a.[sigma] <:::> b.[sigma]. 
-Proof. autorewrite with unconv; intros; destr_logic; eauto. Qed.
-Hint Resolve conv_sub1.
-
-Lemma subty_sub1 A A' sigma : A ::< A' -> A.[sigma] ::< A'.[sigma].
-Proof. induction 1; simpl in *; eauto using subtyp. 
-       assert (T1.[sigma] <:::> (Sort l1).[sigma]) by auto.
-       assert (T2.[sigma] <:::> (Sort l2).[sigma]) by auto.
-       eauto.
-Qed.
-Hint Resolve subty_sub1.
+Lemma upren_dget Gamma Delta xi A : (forall v, v < size Gamma -> (dget Gamma v).[ren xi] = dget Delta (xi v)) -> 
+                           forall v, v < (size Gamma).+1 -> (dget (A :: Gamma) v).[ren (upren xi)] = dget (A.[ren xi] :: Delta) (upren xi v).
+Proof. simpl in *; intros; destruct v; asimpl; auto. rewrite <- H; autosubst. Qed.
+Hint Resolve upren_dget.
 
 Lemma ty_renaming xi Gamma Delta a A :
   [ Gamma |+ a :< A ] ->
   ren_scop xi (size Gamma) (size Delta) ->
   (forall v, v < size Gamma -> (dget Gamma v).[ren xi] = dget Delta (xi v)) ->
   [ Delta |+ a.[ren xi] :< A.[ren xi]].
-Proof. move=>Ha; move:xi Delta; induction Ha; simpl; intros; try solve[eauto].
-       { rewrite H1; auto. }
-       { rewrite closed_sub_id; try eapply const_tys_closed; eassumption || auto. }
-       { asimpl. constructor; try solve[eauto].
-         apply IHHa2; intros; simpl in *; auto.
-         destruct v; simpl; solve[eauto].
-         destruct v; asimpl; auto.
-         rewrite <- H0; autosubst. }
-       { asimpl. constructor; try solve[eauto].
-         apply IHHa; intros; simpl in *; auto.
-         destruct v; simpl; solve[eauto].
-         destruct v; asimpl; auto.
-         rewrite <- H0; autosubst. }
-       { replace B.[a/].[ren xi] with B.[up (ren xi)].[a.[ren xi]/] by autosubst.
-         econstructor; solve[eauto]. }
-       { asimpl. constructor; try solve[eauto].
-         apply IHHa2; intros; simpl in *; auto.
-         destruct v; simpl; solve[eauto].
-         destruct v; asimpl; auto.
-         rewrite <- H0; autosubst. }
-       { asimpl; constructor; auto.
-         replace B.[ren (upren xi)].[a.[ren xi]/] with B.[a/].[ren xi] by autosubst; solve[eauto]. }
-       { replace B.[S_p1 s/].[ren xi] with B.[up (ren xi)].[S_p1 s.[ren xi]/] by autosubst.
-         apply T_p2 with (A := A.[ren xi]); auto. apply IHHa; auto. }
-       { asimpl.
-         replace P.[ab.[ren xi] .: ren xi] with P.[ren (upren xi)].[ab.[ren xi]/] by autosubst.
-         apply T_split with (A := A.[ren xi]) (B := B.[ren xi]);
-         match goal with [|- context[P.[?x].[?t .: ?r]]] => 
-                         replace P.[x].[t .: r] with P.[t .: r].[x] by autosubst | _ => apply IHHa3; solve[auto] end.
-         { apply IHHa1; intros; destruct v; simpl in *; auto.
-           - apply H; auto.
-           - replace A.[wk 1].[ren (upren xi)] with A.[ren xi].[wk 1] by autosubst; reflexivity.
-           - rewrite <- H0; autosubst. }
-         { apply IHHa2; intros; destruct v; simpl in *; auto.
-           - apply H; auto.
-           - replace B.[wk 1].[ren (upren xi)] with B.[ren xi].[wk 1] by autosubst; reflexivity.
-           - rewrite <- H0; autosubst. } }
-       { replace C.[d/].[ren xi] with C.[ren (upren xi)].[d.[ren xi]/] by autosubst.
-         specialize (IHHa1 (upren xi) (Mu D :: Delta)). specialize (IHHa2 xi Delta H H0). specialize (IHHa3 xi Delta H H0).
-         simpl in *. rewrite All_sub in IHHa2.
-         econstructor; auto.
-         - apply IHHa1; auto; destruct v; simpl in *; intros; auto; apply H || rewrite <- H0; autosubst.           
-         - asimpl; asimpl in IHHa2; exact IHHa2. }
-       { apply T_wrap.
-         replace (D_efunc D (Mu D)) with (D_efunc D (Mu D)).[ren xi]; auto. }
-       { simpl in *. replace (D_efunc D (Mu D)).[ren xi] with (D_efunc D (Mu D)); auto.
-         symmetry. apply closed_sub_id; auto. }
+Proof. move=>Ha; move:xi Delta; induction Ha; simpl; intros; try solve[subst;auto].
+  { rewrite closed_sub_id; try eapply const_tys_closed; eassumption || auto. }
+  { asimpl. constructor; try solve[eauto].
+    apply IHHa2; intros; simpl in *; auto.
+    eapply ren_upren; eassumption. }
+  { asimpl; constructor.
+    apply IHHa; intros; simpl in *; try eapply ren_upren; eassumption || auto. }
+  { subst; econstructor; solve[autosubst|eauto]. }
+  { constructor; try solve[eauto]; asimpl.
+    apply IHHa2; intros; simpl in *; auto.
+    eapply ren_upren; eassumption. }
+  { subst; econstructor; try (eapply IHHa1 || eapply IHHa2; eassumption).
+    autosubst. }
+  { eapply T_srec with (C := C.[up (ren xi)]) (u1 := u1.[upn 2 (ren xi)]).
+    { subst; autosubst. }
+    { rewrite up_upren_n_internal; auto. eapply IHHa1.
+      { simpl. intros. change (size Delta).+2 with (2 + size Delta). eapply ren_upnren; try eassumption. }
+      { repeat rewrite iterate_S; rewrite iterate_0; auto. } }
+    { simpl in *. rewrite <- up_upren_internal; auto. }
+    { subst. autosubst. } }
+  { asimpl; eapply T_split with (A := A.[ren xi]) (B := B.[ren xi]) (P := P.[up (ren xi)]). 
+    shelve.
+    { eapply IHHa1; intros; destruct v; simpl in *; auto.
+      - apply H2; auto.
+      - autosubst.
+      - rewrite <- H3; autosubst. }
+    shelve.
+    { apply IHHa2; intros; destruct v; simpl in *; auto.
+      - apply H2; auto.
+      - autosubst.
+      - rewrite <- H3; autosubst. } 
+    Unshelve. subst; autosubst. subst; autosubst. subst; autosubst. }
+  { specialize (IHHa1 (upren xi) (Mu D :: Delta)); specialize (IHHa2 (upnren 2 xi) (u1.[up (ren xi)] :: Mu D :: Delta)); 
+    specialize (IHHa3 xi Delta); simpl in *; intuition.
+    apply T_mu with (C := C.[up (ren xi)]) (u1 := u1.[up (ren xi)]) (u2 := u2.[upn 2 (ren xi)]) (n := n); 
+      try solve [subst;autosubst|auto].
+    { asimpl. eapply IHHa1; simpl; apply ren_upren || apply upren_dget; auto. }
+    { rewrite up_upren_n_internal; auto. 
+      apply IHHa2; repeat rewrite ?iterate_S ?iterate_0; simpl;
+      repeat apply ren_upren; auto.
+      rewrite up_upren_internal; auto.
+      change (size Gamma).+2 with (size (Mu D :: Gamma)).+1.
+      repeat (apply upren_dget; simpl); auto. } }
+  { apply T_wrap.
+    replace (D_efunc D (Mu D)) with (D_efunc D (Mu D)).[ren xi]; auto. }
+  { simpl in *; apply T_unwrap with (D := D); auto.
+    subst; apply closed_sub_id; auto. }
+  { eauto. }
 Qed.
 
 Lemma wk_i_up_jk : forall i j k, sub_eq (wk i >> upn j (wk k)) (upn (j - i) (wk k) >> wk i).
@@ -232,6 +214,12 @@ Hint Resolve closed_upn.
 
 Lemma wk_ty A Gamma e T : [Gamma |+ e :< T] -> [A :: Gamma |+ e.[wk 1] :< T.[wk 1]]. intros; apply ty_renaming with (Gamma := Gamma); auto. Qed.
 Hint Resolve wk_ty.
+Lemma wk2_ty_eq A B Gamma e T u : [Gamma |+ e :< T] -> u = T.[wk 2] -> [A :: B :: Gamma |+ e.[wk 2] :< u].
+Proof. intros; subst; apply ty_renaming with (Gamma := Gamma); intros; asimpl; auto.  Qed.
+Hint Resolve wk2_ty_eq.
+Lemma wk2_ty A B Gamma e T : [Gamma |+ e :< T] -> [A :: B :: Gamma |+ e.[wk 2] :< T.[wk 2]].
+Proof. intros; subst; apply ty_renaming with (Gamma := Gamma); intros; asimpl; auto.  Qed.
+Hint Resolve wk2_ty.
 
 Lemma up_ty A Gamma Delta sigma : [Gamma |+ sigma +| Delta] -> [A.[sigma] :: Gamma |+ up sigma +| A :: Delta].
 Proof. destruct x; simpl; intros; auto; asimpl; rewrite <- subst_comp; try constructor; auto. Qed.
@@ -241,31 +229,43 @@ Hint Extern 1 (_.[_] = _.[_]) => autosubst.
 
 Lemma sub_var_cor : forall e Delta T, [Delta |+ e :< T] -> forall sigma Gamma, [Gamma |+ sigma +| Delta] -> [Gamma |+ e.[sigma] :< T.[sigma]].
 Proof. induction 1; simpl; intros; auto;
-  asimpl; rewrite <- ?subst_comp;
-  try solve [eauto].
+  asimpl; rewrite <- ?subst_comp; simpl in *;
+  try solve [subst;auto].
   { rewrite closed_sub_id; try eapply const_tys_closed; eassumption || eauto. }
-  { replace B.[a.[sigma] .: sigma] with B.[up sigma].[a.[sigma]/]; solve[eauto]. }
-  { econstructor; try replace B.[up sigma].[a.[sigma]/] with B.[a/].[sigma]; solve[auto]. }
-  { replace B.[S_p1 s.[sigma] .: sigma] with B.[up sigma].[S_p1 s.[sigma]/]; solve[eauto]. }
-  { replace P.[ab.[sigma] .: sigma] with P.[up sigma].[ab.[sigma]/] by autosubst. 
-    econstructor. 
+  { eapply T_app; subst; eauto. }
+  { eapply T_smk; try eapply IHhas_type2; subst; auto. }
+  { eapply T_srec with (A := A.[sigma]) (B := B.[up sigma]) (C := C.[up sigma]). shelve.
+    { eapply IHhas_type1.
+      destruct x; intros; auto; asimpl.
+      - constructor; autosubst.
+      - destruct x; asimpl.
+        +  constructor; autosubst.
+        + rewrite <- subst_comp; auto. }
+    { eapply IHhas_type2; auto. }
+    Unshelve. subst; autosubst. subst; autosubst. }
+  { eapply T_split with (P := P.[up sigma]) (A := A.[sigma]) (B := B.[sigma]). shelve.
     { specialize (IHhas_type1 (up sigma)). asimpl in *. auto. }
+    shelve.
     { specialize (IHhas_type2 (up sigma)). asimpl in *. auto. } 
-    { apply IHhas_type3; auto. } }
-  { replace C.[d.[sigma] .: sigma] with C.[up sigma].[d.[sigma]/]; auto. econstructor; try solve[eauto].
+    Unshelve. subst; autosubst. subst; autosubst. subst; autosubst. }
+  { eapply T_mu with (C := C.[up sigma]).
     { eapply IHhas_type1. destruct x; intros.
       { asimpl. constructor; auto. }
       { asimpl; rewrite <- subst_comp; auto. } }
-    { replace C.[up sigma].[Bind 1 .: wk 2] with C.[Bind 1 .: wk 2].[up (up sigma)] by autosubst.
-      replace C.[up sigma].[up (wk 1)] with C.[up (wk 1)].[up (up sigma)] by autosubst.
-      replace (Mu D :>> (All D C.[up (wk 1)].[up (up sigma)] (Bind 0) :>> C.[Bind 1 .: wk 2].[up (up sigma)]))
-      with (Mu D :>> (All D C.[up (wk 1)] (Bind 0) :>> C.[Bind 1 .: wk 2]).[up sigma]) 
-        by (asimpl; rewrite All_sub; autosubst).
-      eauto. } }
+    shelve. shelve.
+    { eapply IHhas_type2.
+      destruct x; intros.
+      { asimpl. rewrite <- subst_comp. constructor; simpl; auto. }
+      { destruct x; asimpl.
+        { constructor; auto. }
+        { eapply wk2_ty_eq; eauto. } } }
+    { auto. }
+    Unshelve. subst; autosubst. subst; autosubst. subst; autosubst. }
   { apply T_wrap.
     replace (D_efunc D (Mu D)) with (D_efunc D (Mu D)).[sigma]; auto. }
-  { simpl in *; replace (D_efunc D (Mu D)).[sigma] with (D_efunc D (Mu D)); auto.
-    symmetry; apply closed_sub_id; auto. }
+  { eapply T_unwrap; auto.
+    subst; apply closed_sub_id; auto. }
+  { eauto. }
 Qed.
 
 Hint Resolve sub_var_cor.
@@ -275,77 +275,16 @@ Hint Rewrite <- subst_comp.
 Lemma sub_comp_cor Gamma Delta Sigma delta sigma : [Gamma |+ delta +| Delta] -> [Delta |+ sigma +| Sigma] -> [Gamma |+ sigma >> delta +| Sigma].
 Proof. intros; asimpl; autorewrite with core; solve[eauto]. Qed.
 
-Lemma conv_pi_pi A B A' B' : (A :>> B) <:::> (A' :>> B') <-> (A <:::> A') /\ (B <:::> B').
+Lemma conv_Pi A B A' B' : (A :>> B) <:::> (A' :>> B') <-> (A <:::> A') /\ (B <:::> B').
 Proof. split; autorewrite with unconv; intros; destr_logic;eauto.
-       autorewrite with core in *; destr_logic; subst.
-       inverts H0. split; eexists; eauto. 
+  autorewrite with core in *; destr_logic; subst.
+  inverts H0. split; eexists; eauto. 
 Qed.
 
-Hint Rewrite conv_pi_pi.
+Hint Rewrite conv_Pi.
 
 Lemma T_conv Gamma e A B : A <:::> B -> [Gamma |+ e :< B] -> [Gamma |+ e :< A].
 Proof. intros; eapply T_subty; try (constructor; symmetry); eassumption. Qed.
-
-Lemma closed_step e e' n : e ::> e' -> closed_at n e -> closed_at n e'.
-Proof. move=> He'; move: n; induction He'; simpl in *; intros;
-       autounfold in *; autorewrite with core in *; destr_logic;
-       try solve[repeat (apply andb_true_intro; split); auto].
-       - apply closed_lift with (i := 0); try eapply Reduction.const_vals_closed; eassumption || auto.
-       - apply cons_id_scoped; auto.
-       - htry; clear_funs. autorewrite with core in *; intuition.
-       - htry; clear_funs. autorewrite with core in *; intuition.
-       - htry; clear_funs. apply cons_id_scoped; auto.
-       - apply cons_id_scoped; auto.
-       - repeat split; auto.
-         apply rall_scoped; simpl; auto.
-         autounfold; autorewrite with core; intuition.
-         apply wk1_scoped; auto.
-Qed.
-
-Hint Resolve closed_step.
-
-(* TODO: Prove backward lemmas *)
-Lemma closed_wk1_back e n : closed_at n.+1 e.[wk 1] -> closed_at n e. Admitted.
-(* this one might be too strong - not sure *)
-Lemma closed_sub_back e a n : closed_at n e.[a/] -> closed_at n.+1 e /\ closed_at n a. Admitted.
-Hint Resolve closed_wk1_back closed_sub_back.
-Lemma closed_red e e' n : e :::> e' -> closed_at n e -> closed_at n e'.
-Proof. induction 1; intros; auto. eapply closed_step; eassumption. Qed.
-Hint Resolve closed_red.
-
-(* Lemma closed_conv e1 e2 n : e1 <:::> e2 -> closed_at n e1 -> closed_at n e2. *)
-(* Proof. induction 1; auto. eapply closed_step; eassumption.  *)
-       
-(* Lemma subty_closed n A B : A ::< B -> closed_at n A -> closed_at n B.  *)
-(* Proof. induction 1; intros; auto. *)
-(* Lemma lam_pi Gamma A B b : [Gamma |+ Lam b :< A :>> B] -> [A :: Gamma |+ b :< B]. *)
-(* Proof. remember (Lam b) as lb; remember (A :>> B) as ab. *)
-(*        (* assert (Lam b <:::> lb) by (subst; auto). *) *)
-(*        assert (Hc : A :>> B <:::> ab) by (subst; auto). *)
-(*        clear Heqab. move=>Hab;move:b Heqlb A B Hc. *)
-(*        induction Hab; intros; try solve by inversion. *)
-(*        { autorewrite with core in*; destr_logic. *)
-(*          inverts Heqlb. *)
-(*          replace b0 with b0.[ids] by autosubst. replace B0 with B0.[ids] by autosubst. *)
-(*          apply sub_var_cor with (Delta := A :: Gamma). *)
-(*          - eapply T_subty; eassumption || constructor; auto using symmetry. *)
-(*          - destruct x; intros; asimpl. *)
-(*            + eapply T_subty; eassumption || constructor; simpl; auto using symmetry. *)
-(*            + constructor; auto. } *)
-(*        { autorewrite with unconv in *; destr_logic. *)
-(*          apply red_Pi in H; apply red_Mu in H0; destr_logic; subst; congruence. } *)
-(*        { exfalso. clear IHHab Heqlb d b Hab d Gamma. *)
-(*          autorewrite with unconv in *; destr_logic. *)
-(*          apply red_Pi in H; destr_logic; subst. *)
-(*          destruct D; simpl in *;  *)
-(*          [apply red_Unit in H0|apply red_Mu in H0|apply red_Sum in H0|apply red_Sigma in H0]; *)
-(*          destr_logic; congruence. } *)
-(*        { subst. specialize (IHHab _  erefl). *)
-(*          assert (Haba' : A0 :>> B <:::> A). transitivity A'; auto using symmetry. *)
-(* by (eapply rst_trans; [|symmetry]; eassumption). *)
-(*          specialize (IHHab _ _ Haba'). *)
-(*          auto. } *)
-(* Qed. *)
 
 (* Lemma typed_closed Gamma e E : [Gamma |+ e :< E] -> closed_at (size Gamma) e. *)
 (* Proof. induction 1; simpl in *; repeat (apply andb_true_intro; split); auto 10. Qed. *)

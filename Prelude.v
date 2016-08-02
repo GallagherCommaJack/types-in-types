@@ -89,7 +89,7 @@ Hint Rewrite lookup_cons.
 
 Hint Rewrite ltn0.
 Hint Extern 1 => match goal with [H:_<0|-_] => exfalso; rewrite ltn0; apply H end.
-Hint Extern 1 False => apply Bool.diff_true_false. 
+Hint Extern 3 False => apply Bool.diff_true_false. 
 
 Local Hint Unfold lt.
 Tactic Notation "destruct" "match" := match goal with [|-context[match ?e with _ => _ end]] => destruct e end.
