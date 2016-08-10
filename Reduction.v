@@ -677,8 +677,6 @@ Instance subtyp_refl : Reflexive subtyp. unfold subtyp; auto. Qed.
 
 Hint Resolve sconv_cong1 sconv_cong2 sconv_cong.
 
-Tactic Notation "eauto" "rst" := eauto using clos_refl_sym_trans.
-Tactic Notation "eauto" "rst" integer(n) := eauto n using clos_refl_sym_trans.
 Instance subtyp_trans : Transitive subtyp. 
 Proof. repeat destruct 1; destr_logic; autorewrite with core in *.
   - left; eauto rst.

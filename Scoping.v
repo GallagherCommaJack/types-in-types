@@ -35,12 +35,6 @@ Proof. induction n; intros; asimpl; auto.
 Qed.
 Hint Resolve closed_upn.
 
-Tactic Notation "destr" "bands" := 
-  repeat match goal with
-           | [H: _ && _|-_] => apply andb_prop in H; destruct H
-           | [H: _ && _ = true |- _] => apply andb_prop in H; destruct H
-         end.
-
 Hint Rewrite Bool.orb_false_r Bool.orb_true_iff.
 Hint Rewrite Bool.andb_negb_r Bool.andb_true_iff.
 Hint Resolve andb_prop Bool.orb_prop.
@@ -191,13 +185,6 @@ Qed.
 
 Hint Resolve up_vars upn_vars wk_vars.
 
-Tactic Notation "htry" :=
-  repeat match goal with
-             [H: ?P -> _, H2 : ?P |- _] => extend (H H2)
-           | [H1: forall e, _, H2 : _ |- _] =>
-             extend (H1 _ H2) || extend (H1 _ _ H2)
-         end.
-
 Lemma sub_vars_scoped : forall e i j sigma, sub_vars i j sigma -> closed_at i e -> closed_at j e.[sigma].
 Proof. move=>e i j sigma Hs He.
   move: i He j sigma Hs.
@@ -230,3 +217,4 @@ Qed.
 (* Axiom conv_sub : forall sigma t t', conv t t' -> conv t.[sigma] t'.[sigma]. *)
 
 (* Theorem sub_welldef sigma Delta Gamma : [Delta |+ sigma +| Gamma] -> forall t T, [Gamma |+ t :< T] -> [Delta |+ t.[sigma] :< T.[sigma]]. *)
+

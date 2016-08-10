@@ -1,22 +1,10 @@
-Require Export Coq.Program.Program Coq.Classes.RelationClasses Omega.
+Require Export Relation_Definitions Relation_Operators Coq.Classes.RelationClasses.
+Require Export Coq.Program.Program.
 Require Export mathcomp.ssreflect.all_ssreflect.
 Require Export Tactics.
 Require Export MonadLib.
+Require Export Fin.
 (* notations *)
-
-Hint Resolve ltP leP eqP.
-Lemma reflect_iff P p : reflect P p -> p <-> P. destruct 1; split; auto; congruence. Qed.
-Hint Rewrite reflect_iff using solve [eauto] : bprop.
-Hint Rewrite <- reflect_iff using solve [eauto] : unprop.
-Ltac conv_to_prop := autorewrite with bprop in *.
-Ltac conv_from_prop := autorewrite with unprop in *.
-
-Ltac bdestruct X :=
-  let H := fresh in 
-  let e := fresh "e" in
-  evar (e: Prop); assert (H: reflect e X); subst e;
-  [eauto
-  | destruct H as [H|H]].
 
 Open Scope seq_scope.
 Notation "⟦ xs ⟧" := (size xs).
@@ -30,40 +18,10 @@ Obligation Tactic := program_simpl; try (simpl in *; auto; solve by inversion).
 
 Set Implicit Arguments.
 
-Fixpoint lookup_con {A} (Gamma: seq A) (i : nat) : option A :=
-  match Gamma , i with
-    | nil , _ => None
-    | (X :: Gamma) , 0 => Some X
-    | (X :: Gamma) , S n => match lookup_con Gamma n with
-                         | Some T => Some T
-                         | None => None
-                       end
-  end.
-
-Lemma lookup_iff_ge A : forall Gamma i, ⟦Gamma⟧ <= i <-> @lookup_con A Gamma i = None.
-  induction Gamma; destruct i; simpl; split; intros; auto; try solve by inversion.
-  - specialize (IHGamma i). assert(H': size Gamma <= i) by auto. apply IHGamma in H'. rewrite H'. auto.
-  - specialize (IHGamma i). destruct (lookup_con Gamma i); [inversion H|apply IHGamma in H]; auto.
-Qed.
-
-Hint Rewrite lookup_iff_ge.
 (* Hint Rewrite ltnNge. *)
 Hint Unfold is_true.
 Hint Rewrite Bool.negb_involutive Bool.negb_true_iff.
 Hint Extern 1 => match goal with [H1 : ?p = true, H2 : ?p = false |- _] => exfalso; congruence end.
-
-Lemma lookup_iff_lt {A} : forall Gamma i, i < ⟦Gamma⟧ <-> exists a : A, lookup_con Gamma i = Some a.
-Proof.
-  split.
-  - remember (lookup_con Gamma i) as lgi; destruct lgi; [eauto|].
-    assert (⟦Gamma⟧ <= i) by (apply lookup_iff_ge; auto).
-    autounfold in *; rewrite ltnNge; autorewrite with core in *; auto.
-  - move=>[a H]; remember (⟦ Gamma ⟧ <= i) as lgi; destruct lgi;
-         [assert (⟦Gamma⟧ <= i) by auto|autounfold];
-         rewrite ltnNge; autorewrite with core in *; [congruence|auto].
-Qed.
-
-Require Export Fin.
 
 Program Fixpoint lookup_lt {A} (Gamma : seq A) (i : fin ⟦Gamma⟧) : A :=
   match Gamma , i with
@@ -92,44 +50,48 @@ Hint Extern 1 => match goal with [H:_<0|-_] => exfalso; rewrite ltn0; apply H en
 Hint Extern 3 False => apply Bool.diff_true_false. 
 
 Local Hint Unfold lt.
-Tactic Notation "destruct" "match" := match goal with [|-context[match ?e with _ => _ end]] => destruct e end.
-Lemma lookup_lt_con A (Gamma : seq A) : forall (i : fin ⟦Gamma⟧), lookup_con Gamma (`i) = Some (lookup_lt Gamma i).
-Proof.
-  induction Gamma; destruct i as [i Hi]; simpl in *; [exfalso;auto|destruct i];
-  reflexivity || rewrite <- IHGamma; simpl in *; destruct match; auto.
-Qed.  
 
 (* Relation stuff *)
 
-Require Export Relation_Definitions Relation_Operators.
-Hint Constructors clos_trans clos_refl_trans_1n.
+Local Hint Constructors clos_trans clos_refl_trans_1n.
 
 Lemma rtc_rtc : forall A R e1 e2 e3, clos_refl_trans_1n A R e1 e2 -> clos_refl_trans_1n A R e2 e3 -> clos_refl_trans_1n A R e1 e3.
 Proof. induction 1; eauto. Qed.
 
+Instance clos_trans_transitive A R : Transitive (clos_trans A R) := t_trans _ _.
+Instance clos_refl_trans_preorder A R : PreOrder (clos_refl_trans A R). split; eauto using clos_refl_trans. Qed.
+Instance clos_refl_sym_trans_equivalence A R : Equivalence (clos_refl_sym_trans A R). split; eauto using clos_refl_sym_trans. Qed.
+
+Hint Extern 1 (reflect (_ = _) (_ == _)) => apply eqP.
+Instance eqType_beq_equivalence (E : eqType) : Equivalence (fun e1 e2 : E => e1 == e2).
+Proof. split; unfold Reflexive; unfold Symmetric; unfold Transitive; intros.
+  - rewrite (reflect_iff (x = x)); eauto. 
+  - erewrite (reflect_iff (x = y)) in H; auto; rewrite (reflect_iff (y = x)); auto.
+  - erewrite (reflect_iff (x = y)) in H; auto.
+    erewrite (reflect_iff (y = z)) in H0; auto.
+    rewrite (reflect_iff (x = z)); solve[auto|congruence].    
+Qed.
+
+Instance leq_preorder : PreOrder (fun x y => x <= y).
+Proof. split; unfold Reflexive; unfold Transitive; intros; conv_to_prop; omega. Qed.
+  
+Instance ltn_preorder : Transitive (fun x y => x < y).
+Proof. unfold Transitive; intros; conv_to_prop; omega. Qed.
+
+(* inductive type schemas *)
+
+(* W types *)
 Inductive W (A : Type) (B : A -> Type) : Type :=
   sup : forall a, (B a -> W B) -> W B.
 
+(* ADT's *)
 Set Boolean Equality Schemes.
 Set Decidable Equality Schemes.
+
 Inductive desc : Type := 
   d_One | d_Ind
 | d_Sum of desc of desc
 | d_Prd of desc of desc.
-
-Fixpoint desc_func (D : desc) (X : Type) : Type :=
-  match D with
-      d_One => True
-    | d_Ind => X
-    | d_Sum A B => desc_func A X + desc_func B X
-    | d_Prd A B => desc_func A X * desc_func B X
-  end.
-
-Example Seq (D : desc) : desc := d_Sum d_One (d_Prd D d_Ind).
-Definition desc_dec_eq (e1 e2 : desc) : {e1 = e2} + {e1 <> e2}.
-Proof.  decide equality. Defined.
-
-(* This is hilarious *)
 
 Hint Resolve andb_true_intro.
 Hint Resolve internal_desc_dec_bl internal_desc_dec_lb.

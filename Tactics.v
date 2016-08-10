@@ -1,3 +1,7 @@
+Require Import Coq.Program.Program Coq.Classes.RelationClasses Omega.
+Require Import mathcomp.ssreflect.all_ssreflect.
+Require Import Relation_Definitions Relation_Operators.
+Require Export Omega.
 Ltac destr_sums :=
   match goal with
     | [ H :  _  + {_} |- _ ] => destruct H
@@ -100,3 +104,35 @@ Tactic Notation "inverts" ident(H) := inversion H; clear H; subst.
 
 Tactic Notation "rewrite" "assumption" ident(H) := rewrite H; try assumption.
 Tactic Notation "rewrite" "asms" := repeat match goal with [H:_|-_] => rewrite assumption H end.
+
+Tactic Notation "destr" "bands" := 
+  repeat match goal with
+           | [H: _ && _|-_] => apply andb_prop in H; destruct H
+           | [H: _ && _ = true |- _] => apply andb_prop in H; destruct H
+         end.
+
+Tactic Notation "htry" :=
+  repeat match goal with
+             [H: ?P -> _, H2 : ?P |- _] => extend (H H2)
+           | [H1: forall e, _, H2 : _ |- _] =>
+             extend (H1 _ H2) || extend (H1 _ _ H2)
+         end.
+
+Tactic Notation "eauto" "rst" := eauto using clos_refl_sym_trans.
+Tactic Notation "eauto" "rst" integer(n) := eauto n using clos_refl_sym_trans.
+
+Hint Resolve ltP leP eqP.
+Lemma reflect_iff P p : reflect P p -> p <-> P. destruct 1; split; auto; congruence. Qed.
+Hint Rewrite reflect_iff using solve [eauto] : bprop.
+Hint Rewrite <- reflect_iff using solve [eauto] : unprop.
+Ltac conv_to_prop := autorewrite with bprop in *.
+Ltac conv_from_prop := autorewrite with unprop in *.
+
+Ltac bdestruct X :=
+  let H := fresh in 
+  let e := fresh "e" in
+  evar (e: Prop); assert (H: reflect e X); subst e;
+  [eauto
+  | destruct H as [H|H]].
+
+Tactic Notation "destruct" "match" := match goal with [|-context[match ?e with _ => _ end]] => destruct e end.
