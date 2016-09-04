@@ -90,6 +90,7 @@ Set Decidable Equality Schemes.
 
 Inductive desc : Type := 
   d_One | d_Ind
+| d_Fix of desc
 | d_Sum of desc of desc
 | d_Prd of desc of desc.
 
@@ -102,11 +103,24 @@ Proof. move=>x y. apply (iffP idP); auto. Qed.
 Canonical desc_eqMixin := EqMixin desc_eqnP.
 Canonical desc_eqType := EqType desc desc_eqMixin.
 
+(* fixpoint taker *)
+Inductive D_mu D : desc -> Type :=
+| D_sum_inl : forall D1 D2, D_mu D D1 -> D_mu D (d_Sum D1 D2)
+| D_sum_inr : forall D1 D2, D_mu D D2 -> D_mu D (d_Sum D1 D2)
+| D_prd : forall D1 D2, D_mu D D1 -> D_mu D D2 -> D_mu D (d_Prd D1 D2)
+| D_unit : D_mu D d_One
+| D_wrap : D_mu D D -> D_mu D d_Ind
+| D_fix : forall d, D_mu d d -> D_mu D (d_Fix d).
+
+Hint Constructors D_mu.
+Notation mu D := (D_mu D D).
+
 (* ADT functors *)
 Fixpoint desc_func (D : desc) (X : Type) : Type :=
   match D with
       d_One => True
     | d_Ind => X
+    | d_Fix F => mu F
     | d_Sum A B => desc_func A X + desc_func B X
     | d_Prd A B => desc_func A X * desc_func B X
   end.
@@ -115,17 +129,6 @@ Definition dfmap D A B (f : A -> B) : desc_func D A -> desc_func D B. induction 
 Hint Resolve dfmap.
 Program Instance desc_functor D : Functor (desc_func D) := Build_Functor _ (dfmap D) _ _.
 Solve Obligations with induction D; simpl; intros; auto; destruct x; simpl; congruence.
-
-(* fixpoint taker *)
-Inductive D_mu D : desc -> Type :=
-| D_sum_inl : forall D1 D2, D_mu D D1 -> D_mu D (d_Sum D1 D2)
-| D_sum_inr : forall D1 D2, D_mu D D2 -> D_mu D (d_Sum D1 D2)
-| D_prd : forall D1 D2, D_mu D D1 -> D_mu D D2 -> D_mu D (d_Prd D1 D2)
-| D_unit : D_mu D d_One
-| D_wrap : D_mu D D -> D_mu D d_Ind.
-
-Hint Constructors D_mu.
-Notation mu D := (D_mu D D).
 
 (* proof of iso-recursivity *)
 Definition unwrap D1 D2 : D_mu D1 D2 -> desc_func D2 (mu D1).
@@ -145,6 +148,7 @@ Qed.
 Fixpoint RAll_aux D1 D2 (P : mu D1 -> Type) : desc_func D2 (mu D1) -> Type :=
   match D2 with
     | d_One => fun _ => True
+    | d_Fix D => fun _ => True
     | d_Ind => fun d => P d
     | d_Sum D21 D22 => fun d => match d with inl a => RAll_aux D21 P a | inr b => RAll_aux D22 P b end
     | d_Prd D21 D22 => fun d => let (a,b) := d in prod (RAll_aux D21 P a) (RAll_aux D22 P b)
@@ -158,7 +162,7 @@ Definition all D1 D2 (P : mu D1 -> Type) (p : forall d, P d) : forall (d : D_mu 
   fun d => all_aux P p D2 (unwrap d).
 
 Definition mu_comb_aux D1 D2 (C : mu D1 -> Type) (c : forall d, RAll C d -> C d) : forall (d : D_mu D1 D2), RAll C d.
-Proof. induction d; cbv; intros; intuition. Defined.
+Proof. induction d; try solve[cbv; intros; firstorder]. Defined.
 
 Definition mu_comb D (C : mu D -> Type) (c : forall d, RAll C d -> C d) d : C d := c d (mu_comb_aux C c d).
 
@@ -167,30 +171,36 @@ Inductive mexp : Type :=
 | inl__m : mexp -> mexp
 | inr__m : mexp -> mexp
 | pair__m : mexp -> mexp -> mexp
+| wrap__m : mexp -> mexp
 | unit__m : mexp
-| wrap__m : mexp -> mexp.
+| fix__m : mexp -> mexp.
 
 Fixpoint mu__mexp D (d : desc) (m : mexp) : bool :=
   match d,m with
     | d_Prd d1 d2, pair__m a b => mu__mexp D d1 a && mu__mexp D d2 b
     | d_Sum d1 d2, inl__m a => mu__mexp D d1 a
     | d_Sum d1 d2, inr__m b => mu__mexp D d2 b
-    | d_One, unit__m => true
     | d_Ind, wrap__m d => mu__mexp D D d
+    | d_One, unit__m => true
+    | d_Fix D', fix__m d => mu__mexp D' D' d
     | _,_ => false
   end.
   
 (* Inductive mu__mexp D : desc -> mexp -> Type := *)
 Section mu__mexp.
-  Variables (D D1 D2 : desc) (d1 d2 : mexp).
-  Lemma T_inl : mu__mexp D D1 d1 -> mu__mexp D (d_Sum D1 D2) (inl__m d1). cbn; auto. Qed.
-  Lemma T_inr : mu__mexp D D2 d2 -> mu__mexp D (d_Sum D1 D2) (inr__m d2). cbn; auto. Qed.
-  Lemma T_pair : mu__mexp D D1 d1 -> mu__mexp D D2 d2 -> mu__mexp D (d_Prd D1 D2) (pair__m d1 d2). cbn; auto. Qed.
-  Lemma T_unit : mu__mexp D d_One unit__m. cbn; auto. Qed.
-  Lemma T_wrap : forall d, mu__mexp D D d -> mu__mexp D d_Ind (wrap__m d). cbn; auto. Qed.
+  Variables (D D1 D2 : desc) (d d1 d2 : mexp).
+  Collection Top := D d.
+  Collection Fst := D1 d1.
+  Collection Snd := D2 d2.
+  Lemma T_inl : mu__mexp D D1 d1 -> mu__mexp D (d_Sum D1 D2) (inl__m d1). Proof using. cbn; auto. Qed.
+  Lemma T_inr : mu__mexp D D2 d2 -> mu__mexp D (d_Sum D1 D2) (inr__m d2). Proof using. cbn; auto. Qed.
+  Lemma T_pair : mu__mexp D D1 d1 -> mu__mexp D D2 d2 -> mu__mexp D (d_Prd D1 D2) (pair__m d1 d2). Proof using. cbn; auto. Qed.
+  Lemma T_wrap : forall d, mu__mexp D D d -> mu__mexp D d_Ind (wrap__m d). Proof using. cbn; auto. Qed.
+  Lemma T_unit : mu__mexp D d_One unit__m. Proof using. cbn; auto. Qed.
+  Lemma T_fix : mu__mexp D1 D1 d1 -> mu__mexp D (d_Fix D1) (fix__m d1). Proof using. cbn; auto. Qed.
 End mu__mexp.
 
-Hint Resolve T_inl T_inr T_pair T_unit T_wrap.
+Hint Resolve T_inl T_inr T_pair T_unit T_wrap T_fix.
 Hint Constructors mexp.
 Notation D_mexp D1 D2 := {m : mexp | mu__mexp D1 D2 m}.
 
@@ -200,16 +210,17 @@ Section mu__texp.
   Program Definition pair__t D D1 D2 (d1 : D_mexp D D1) (d2 : D_mexp D D2) : D_mexp D (d_Prd D1 D2) := pair__m d1 d2.
   Program Definition unit__t D : D_mexp D d_One := unit__m.
   Program Definition wrap__t D (d : D_mexp D D) : D_mexp D d_Ind := wrap__m d.
+  Program Definition fix__t D1 D2 (d2 : D_mexp D2 D2) : D_mexp D1 (d_Fix D2) := fix__m d2.
 End mu__texp.
 
-Hint Resolve inl__t inr__t pair__t unit__t wrap__t.
+Hint Resolve inl__t inr__t pair__t unit__t wrap__t fix__t.
 
 Definition mexp_of_mu D1 D2 : D_mu D1 D2 -> D_mexp D1 D2.
 Proof. induction 1; eauto. Defined.
 
 Set Transparent Obligations.
 Definition mu_of_mexp_aux D1 D2 (d : mexp) (Hd : mu__mexp D1 D2 d) : D_mu D1 D2.
-Proof. move:D2 Hd; induction d; destruct D2; simpl; intros; 
+Proof. move:D1 D2 Hd; induction d; destruct D2; simpl; intros; 
   autounfold in *; destr bands; discriminate || auto. Defined.
 
 Definition mu_of_mexp {D1 D2} (d : D_mexp D1 D2) : D_mu D1 D2 := mu_of_mexp_aux _ _ (`d) (proj2_sig d).
@@ -220,9 +231,10 @@ Proof. destruct x1,x2; simpl; intros; subst; f_equal; apply bool_irrelevance. Qe
 
 Lemma mexp_of_mu_of_mexp D1 D2 : forall (d : D_mexp D1 D2) , mexp_of_mu (mu_of_mexp d) = d.
 Proof. intros; unfold mu_of_mexp; destruct d as [d Hd]; simpl. apply bool_subset_eq_compat; simpl.
-  move: D2 Hd; induction d; destruct D2; simpl; intros;
+  move: D1 D2 Hd; induction d; destruct D2; simpl; intros;
   solve[discriminate|try destruct match; simpl; f_equal; auto]. Qed.
 
 Lemma mu_of_mexp_of_mu D1 D2 : forall (d : D_mu D1 D2) , mu_of_mexp (mexp_of_mu d) = d.
-Proof. induction d; trivial; simpl; repeat match goal with [H:context[mexp_of_mu ?d] |- _] => destruct (mexp_of_mu d) end;
+Proof. induction d; trivial; simpl; 
+  repeat match goal with [H:context[mexp_of_mu ?d] |- _] => destruct (mexp_of_mu d) end;
   subst; unfold mu_of_mexp; simpl; try destruct match; solve[repeat f_equal;apply bool_irrelevance]. Qed.

@@ -103,7 +103,9 @@ Tactic Notation "solve" "by" "inversion" :=
 Tactic Notation "inverts" ident(H) := inversion H; clear H; subst.
 
 Tactic Notation "rewrite" "assumption" ident(H) := rewrite H; try assumption.
+Tactic Notation "erewrite" "assumption" ident(H) := erewrite H; try eassumption.
 Tactic Notation "rewrite" "asms" := repeat match goal with [H:_|-_] => rewrite assumption H end.
+Tactic Notation "erewrite" "asms" := repeat match goal with [H:_|-_] => erewrite assumption H end.
 
 Tactic Notation "destr" "bands" := 
   repeat match goal with
